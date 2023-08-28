@@ -22,7 +22,7 @@ DEV = os.environ.get('dev')
 
 
 def get_secrets():
-    secret_name = "arn:aws:secretsmanager:us-east-1:547847502175:secret:the6ixclandjango-QubtHJ"
+    secret_name = "arn:aws:secretsmanager:us-east-1:547847502175:secret:PricingProject-hIvNc3"
     region_name = "us-east-1"
 
     # Create a Secrets Manager client
@@ -33,7 +33,6 @@ def get_secrets():
         service_name='secretsmanager',
         region_name=region_name
     )
-    cwc = 0
     # In this sample we only handle the specific exceptions for the 'GetSecretValue' API.
     # See https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
     # We rethrow the exception by default.

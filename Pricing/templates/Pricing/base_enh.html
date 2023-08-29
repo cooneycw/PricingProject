@@ -13,14 +13,13 @@
 <body>
     <header>
         <nav class="navbar navbar-light navbar-expand-lg navigation-clean-button" id="welcome_to_pricing" style="border-style: solid;border-top-style: none;border-right-style: none;border-bottom-color: #007ac4;border-left-style: none;">
-            <div class="container"><img src="{% static 'Pricing/lagrange_mult.png' %}" style="max-width: auto;height: 49px;"><a class="navbar-brand" href="{% url 'Pricing-home' %}" style="margin: 10px;">Pricing</a><button data-bs-toggle="collapse" class="navbar-toggler" data-bs-target="#navcol-1"><span class="visually-hidden">Toggle navigation</span><span class="navbar-toggler-icon"></span></button>
+            <div class="container"><img src="{% static 'Pricing/lagrange_mult.png' %}" style="max-width: auto;height: 49px;"><a class="navbar-brand" href="{% url 'Pricing-home' %}" style="margin: 10px;">Insurance Pricing Game</a><button data-bs-toggle="collapse" class="navbar-toggler" data-bs-target="#navcol-1"><span class="visually-hidden">Toggle navigation</span><span class="navbar-toggler-icon"></span></button>
                 <div class="collapse navbar-collapse" id="navcol-1">
                 <ul class="navbar-nav me-auto">
 
                 </ul>
                     <span class="navbar-text actions">
                         {% if user.is_authenticated %}
-                            <a class="login" href="{% url 'Example-menu' %}">Examples</a>
                             <a class="login" href="{% url 'profile' %}">User Profile</a>
                             <a class="btn btn-light action-button" role="button" href="{% url 'logout' %}" style="color: var(--bs-gray-900);background: #7acafc;">Log Out</a>
                         {% else %}

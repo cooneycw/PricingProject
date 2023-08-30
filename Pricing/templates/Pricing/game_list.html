@@ -5,23 +5,36 @@
     <main class="page landing-page">
         <section class="clean-block clean-info dark">
             <div class="container">
+                <div class="block-heading" style="text-align:center">
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Game Select" value="Back to Game Select"></input>
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Refresh Listing" value="Refresh Listing"></input>
+                    </form>
+                </div>
                 <div class="block-heading" style="text-align: left">
-                    <h3>Active Games:</h3>
+                    <h3>Activated Games (pending start on the server):</h3>
                     <ul>
                         {% for game in active_games %}
                             <li>
-                                {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }}
+                                {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.game_type }}
                             </li>
+                            {% empty %}
+                                <li>No active games presently.</li>
+                                <br/>
                         {% endfor %}
                     </ul>
-                    <h3>Accessible Games:</h3>
+                    <h3>Click to View Game Details:</h3>
                     <ul id="accessible-games-list">
                         {% for game in accessible_games %}
                             <li>
-                                <a href="{% url 'dashboard' game_id=game.game_id %}">
-                                    {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }}
+                                <a href="{% url 'Pricing-game_dashboard' game_key=game.game_id %}">
+                                    {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.game_type }}
                                 </a>
                             </li>
+                            {% empty %}
+                                <li>No active games presently.</li>
+                                <br/>
                         {% endfor %}
                     </ul>
                 </div>

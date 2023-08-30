@@ -16,13 +16,14 @@ class IndivGames(models.Model):
     game_id = models.CharField(max_length=128, unique=True)
     initiator = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField(default=timezone.now)
-    status = models.CharField(max_length=16, default="active")
+    status = models.CharField(max_length=19, default="active")
     game_observable = models.BooleanField(default=False)
 
 
 class Players(models.Model):
     game = models.ForeignKey(IndivGames, related_name='players', on_delete=models.CASCADE)
-    player = models.CharField(max_length=128, null=True, blank=True)
-    player_id = models.IntegerField()
+    player_id = models.ForeignKey(User, related_name='participating_games', null=True, blank=True, on_delete=models.CASCADE)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
+    player_id_display = models.IntegerField()
     player_type = models.CharField(max_length=16)
     profile = models.CharField(max_length=16)

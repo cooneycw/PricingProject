@@ -143,3 +143,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+CONFIG_MAX_TYPES = 10
+CONFIG_AVG_PLAYERS = 5
+CONFIG_STD_DEV = 2 / 5
+CONFIG_OBSERVABLE = False
+CONFIG_FRESH_PREFS = 60

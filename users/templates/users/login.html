@@ -1,27 +1,30 @@
 {% extends "Pricing/base_enh.html" %}
 {% load crispy_forms_tags %}
+{% load static %}
 {% block content %}
-         <div id="welcome_to_pricing">
-            <div id="jumbotron" class="p-5 mb-4 bg-light round-3" style="background: linear-gradient(51deg, rgb(255,255,255) 0%, rgb(255,255,255) 2%, rgb(192,238,230) 99%, white), rgb(218,221,160);">
-                <div class="container-fluid py-0" style="*padding-top: 2px; text-align: left">
-                    <h2 style="box-shadow: 0px 0px;">Login:</h2>
-                    <hr/>
-                    <div class="content-section">
+        <main class="page landing-page">
+            <section class="clean-block clean-form dark">
+                <div class="container">
+                    <div class="block-heading">
+                        <h3 class="text-info">Login:</h3>
+
+                        <div class="content-section">
                         <form method="POST">
                         {% csrf_token %}
-                        <fieldset class="form-group">
-                            {{ form|crispy }}
-                        </fieldset>
+                        {{ form|crispy }}
                         <div class="form-group mt-2 mb-2">
                             <button class="btn btn-light action-button" type="submit" style="color: var(--bs-gray-900);background: #e7bb3f;">Login</button>
                         </div>
                         </form>
+                                                        <br/>
+                            <small class="text-muted">
+                            Need an account? <a class="ml-2" href="{% url 'register' %}">Sign Up</a>
+                            </small>
+
+                        </div>
                     </div>
-                    <hr/>
-                    <small class="text-muted">
-                        Need an account? <a class="ml-2" href="{% url 'register' %}">Sign Up</a>
-                    </small>
+
                 </div>
-            </div>
-         </div>
+            </section>
+        </main>
 {% endblock content %}

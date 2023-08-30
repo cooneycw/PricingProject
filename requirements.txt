@@ -1,0 +1,5 @@
+brotlipy==0.7.0
+crispy-bootstrap4==2022.1
+django==4.1
+django-crispy-forms==2.0
+numpy==1.25.2

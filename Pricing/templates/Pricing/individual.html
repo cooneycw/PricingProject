@@ -2,25 +2,22 @@
 {% load crispy_forms_tags %}
 {% load static %}
 {% block content %}
-    <main class="page landing-page">
+        <main class="page landing-page">
             <section class="clean-block clean-form dark">
                 <div class="container">
                     <div class="block-heading">
-                        <h3 class="text-info">Register to access website:</h3>
+                        <h3 class="text-info">Select individual game parameters:</h3>
                         <div class="content-section">
                             <form method="POST">
                             {% csrf_token %}
-                                {{ form|crispy }}
+                                {{ form.as_p }}
                                 <br/>
-                                <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Register" value="Register"></input>
+                                <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Game Select" value="Back to Game Select"></input>
+                                <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Start Game" value="Start Game"></input>
                             </form>
                         </div>
-                        <small class="text-muted">
-                            <br/>
-                            Already have an account? <a class="ml-2" href="{% url 'login' %}">Sign In</a>
-                        </small>
                     </div>
                 </div>
             </section>
-    </main>
+        </main>
 {% endblock content %}

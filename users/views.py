@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.db import IntegrityError
 from django.contrib import messages
+from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from .forms import UserRegisterForm, UserUpdateForm
 
@@ -9,20 +10,18 @@ def register(request):
     form = UserRegisterForm()
     if request.method == 'POST':
         form = UserRegisterForm(request.POST)
-        try:
-            form.save()
-            # Handle successful registration, maybe redirect to a success page or login page
-        except IntegrityError:  # Ensure you've imported IntegrityError from django.db
-            messages.error(request, 'A user with that identity already exists.')
-            return redirect('login')
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            email = form.cleaned_data.get('email')
+            # Check if a user with the given username or email already exists
+            if User.objects.filter(username=username).exists() or User.objects.filter(email=email).exists():
+                messages.warning(request, 'A user with that username or email already exists.')
+            else:
+                form.save()
+                messages.success(request, f'Account created for {username}. Please login.')
+                return redirect('login')
+    context = {'form': form}
 
-        username = form.cleaned_data.get('username')
-        messages.success(request, f'Account created for {username}. Please login.')
-        return redirect('login')
-    else:
-        context = {
-                    'form': form,
-                   }
     return render(request, 'users/register.html', context)
 
 

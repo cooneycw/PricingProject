@@ -1,0 +1,27 @@
+{% extends "Pricing/base_enh.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% block content %}
+    <main class="page landing-page">
+        <section class="clean-block clean-info dark">
+            <div class="container">
+                <div class="block-heading" style="text-align:center">
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Group Game Select" value="Back to Group Game Select"></input>
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Confirm Game Join" value="Confirm Game Join"></input>
+                    </form>
+                </div>
+                <div class="block-heading">
+                    <h3>Confirm join to the following game:</h3>
+                    <ul style="list-style-type: none;">
+                        <li>
+                            {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.initiator_name }}
+                                     [waiting on {{ game.additional_players_needed }}]
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+{% endblock content %}

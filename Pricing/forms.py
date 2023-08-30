@@ -16,16 +16,18 @@ class GamePrefsForm(forms.ModelForm):
         mean_val = CONFIG_AVG_PLAYERS
         std_dev = round(mean_val * CONFIG_STD_DEV)
 
+        self.fields['human_player_cnt'].initial = int(2)
         self.fields['sel_type_01'].initial = int(np.random.normal(mean_val, std_dev))
         self.fields['sel_type_02'].initial = int(np.random.normal(mean_val, std_dev))
         self.fields['sel_type_03'].initial = int(np.random.normal(mean_val, std_dev))
 
-    sel_type_01 = forms.ChoiceField(choices=CHOICES, label="Growth profile: ")
-    sel_type_02 = forms.ChoiceField(choices=CHOICES, label="Profitability profile:")
-    sel_type_03 = forms.ChoiceField(choices=CHOICES, label="Balanced profile:")
+    human_player_cnt = forms.ChoiceField(choices=CHOICES, label="Human Players:", required=False)
+    sel_type_01 = forms.ChoiceField(choices=CHOICES, label="CPU w Growth profile:")
+    sel_type_02 = forms.ChoiceField(choices=CHOICES, label="CPU w Profitability profile:")
+    sel_type_03 = forms.ChoiceField(choices=CHOICES, label="CPU w Balanced profile:")
     game_observable = forms.BooleanField(required=False, initial=CONFIG_OBSERVABLE,
                                          label="Check box to make game observable by others:")
 
     class Meta:
         model = GamePrefs
-        fields = ['sel_type_01', 'sel_type_02', 'sel_type_03', 'game_observable']
+        fields = ['human_player_cnt', 'sel_type_01', 'sel_type_02', 'sel_type_03', 'game_observable']

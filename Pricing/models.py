@@ -8,6 +8,7 @@ class GamePrefs(models.Model):
     sel_type_01 = models.IntegerField()
     sel_type_02 = models.IntegerField()
     sel_type_03 = models.IntegerField()
+    human_player_cnt = models.IntegerField(default=1)
     game_observable = models.BooleanField()
     timestamp = models.DateTimeField(auto_now=True)  # This field will be updated every time the model is saved.
 
@@ -15,8 +16,10 @@ class GamePrefs(models.Model):
 class IndivGames(models.Model):
     game_id = models.CharField(max_length=128, unique=True)
     initiator = models.ForeignKey(User, on_delete=models.CASCADE)
+    initiator_name = models.CharField(max_length=128, null=True, blank=True)
     timestamp = models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=19, default="active")
+    human_player_cnt = models.IntegerField(default=1)
     game_observable = models.BooleanField(default=False)
 
 

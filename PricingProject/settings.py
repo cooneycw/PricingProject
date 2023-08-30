@@ -9,6 +9,8 @@ https://docs.djangoproject.com/en/4.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.1/ref/settings/
 """
+import socket
+import ast
 from pathlib import Path
 from .secrets import get_secrets, DEV
 
@@ -21,17 +23,45 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-a2=ggy0afgh%+$9e0c+z76a5&akv2-n+*pu6+@cbgkpdbt1$+0'
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
-if DEV == "True":
-    DEBUG = True
-else:
+IPADD = socket.gethostbyname(socket.gethostname())
+ec2 = True
+if IPADD in ('192.168.5.62', '127.0.1.1', '127.0.0.1') or DEV == 'True':
+    ec2 = False
+
+if ec2:
     DEBUG = False
+    BASE_URL = 'https://essent.ai'
+else:
+    DEBUG = True
+    BASE_URL = 'http://127.0.0.1:8080'
+
+print(f'EC2 environment: {ec2}  Ip address:{IPADD}  Dev: {DEV}')
+
+secret = get_secrets()
+secret_dict = ast.literal_eval(secret)
+
+SECRET_KEY = secret_dict['DJANGO_SECRET_KEY']
+
+POSTGRES_PORT = secret_dict['POSTGRES_PORT']
+POSTGRES_HOST = secret_dict['POSTGRES_HOST']
+
+if DEBUG:
+    POSTGRES_PORT = secret_dict['POSTGRES_PORT_DEV']
+    POSTGRES_HOST = secret_dict['POSTGRES_HOST_DEV']
 
 ALLOWED_HOSTS = ['127.0.0.1', 'essentai.ca']
 
+# CSRF_TRUSTED_ORIGINS = ["https://the6ixclan.ca"]
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = ["https://the6ixclan.ca", "http://localhost:8080", "http://127.0.0.1:8080"]
+else:
+    CSRF_TRUSTED_ORIGINS = ["https://the6ixclan.ca", "http://the6ixclan.ca"]
 
+# Application definition
+print('csrf')
 # Application definition
 
 INSTALLED_APPS = [
@@ -85,11 +115,11 @@ WSGI_APPLICATION = 'PricingProject.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'pricing_django_dev',
-        'USER': 'pricing_user',
-        'PASSWORD': 'W1lliamC',
-        'HOST': '192.168.5.62',
-        'PORT': '5432',
+        'NAME': secret_dict['POSTGRES_DB'],
+        'USER': secret_dict['POSTGRES_USER'],
+        'PASSWORD': secret_dict['POSTGRES_PASSWORD'],
+        'HOST': POSTGRES_HOST,
+        'PORT': POSTGRES_PORT,
     }
 }
 
@@ -124,7 +154,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/New_York'
 
 USE_I18N = True
 
@@ -148,4 +178,4 @@ CONFIG_MAX_TYPES = 10
 CONFIG_AVG_PLAYERS = 5
 CONFIG_STD_DEV = 2 / 5
 CONFIG_OBSERVABLE = False
-CONFIG_FRESH_PREFS = 60
+CONFIG_FRESH_PREFS = 3

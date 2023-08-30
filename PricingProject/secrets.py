@@ -18,7 +18,7 @@ AWS_ACCESS = os.environ.get('aws_access_key_id')
 AWS_SECRET = os.environ.get('aws_secret_access_key')
 DEV = os.environ.get('dev')
 
-# print(f'AWS_ACCESS: {AWS_ACCESS}  AWS_SECRET: {AWS_SECRET}  DEV: {DEV}')
+#  print(f'AWS_ACCESS: {AWS_ACCESS}  AWS_SECRET: {AWS_SECRET}  DEV: {DEV}')
 
 
 def get_secrets():

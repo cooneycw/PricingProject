@@ -24,7 +24,7 @@ class IndivGames(models.Model):
 
 
 class Players(models.Model):
-    game = models.ForeignKey(IndivGames, related_name='players', on_delete=models.CASCADE)
+    game = models.ForeignKey(IndivGames, db_column='game_id', related_name='players', on_delete=models.CASCADE)
     player_id = models.ForeignKey(User, related_name='participating_games', null=True, blank=True, on_delete=models.CASCADE)
     player_name = models.CharField(max_length=128, null=True, blank=True)
     player_id_display = models.IntegerField()

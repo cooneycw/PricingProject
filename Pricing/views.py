@@ -340,6 +340,39 @@ def join_group_game(request, game_key):
     context['game'] = game
     return render(request, template_name, context)
 
+
+@login_required()
+def observe(request):
+    title = 'Insurance Pricing Game: Observe Game'
+    template_name = 'Pricing/observe.html'
+    context = dict()
+    user = request.user
+    all_games = IndivGames.objects.filter(
+        game_observable=True,
+        status__in=['running', 'completed']
+    ).order_by('-timestamp').annotate(
+        game_type=Case(
+            When(human_player_cnt=1, then=Value('individual')),
+            default=Value('group'),
+            output_field=CharField(),
+        )
+    )
+
+
+    # All accessible (observable) games
+    accessible_games = [game for game in all_games]
+
+    # Check for 'Back to Game Select' POST request
+    if request.POST.get('Back to Game Select') == 'Back to Game Select':
+        return redirect('Pricing-start')
+
+    # Populate the context and render the template
+    context = {
+        'accessible_games': accessible_games,
+    }
+    return render(request, template_name, context)
+
+
 @login_required()
 def game_dashboard(request, game_key):
     user = request.user

@@ -14,7 +14,7 @@ class GamePrefs(models.Model):
 
 
 class IndivGames(models.Model):
-    game_id = models.CharField(max_length=128, unique=True)
+    game_id = models.CharField(max_length=128, primary_key=True)
     initiator = models.ForeignKey(User, on_delete=models.CASCADE)
     initiator_name = models.CharField(max_length=128, null=True, blank=True)
     timestamp = models.DateTimeField(default=timezone.now)

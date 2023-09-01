@@ -260,7 +260,7 @@ def game_list(request):
     player_game_ids = Players.objects.filter(player_id=user).values_list('game', flat=True)
 
     all_games = IndivGames.objects.filter(
-        Q(initiator=user) | Q(id__in=player_game_ids)
+        Q(initiator=user) | Q(game_id__in=player_game_ids)
     ).order_by('-timestamp').annotate(
         game_type=Case(
             When(human_player_cnt=1, then=Value('individual')),

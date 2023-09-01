@@ -18,7 +18,7 @@
                         {% for game in accessible_games %}
                             <li>
                                 <a href="{% url 'Pricing-game_dashboard' game_key=game.game_id %}">
-                                    {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.game_type }}
+                                    {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.initiator }} - {{ game.game_type }}
                                 </a>
                             </li>
                             {% empty %}

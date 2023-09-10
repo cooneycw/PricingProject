@@ -5,11 +5,12 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.db import transaction
+from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q, Count, Case, When, Value, CharField, Max
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
-from .models import GamePrefs, IndivGames, Players
+from .models import GamePrefs, IndivGames, Players, ChatMessage
 
 
 # Create your views here.
@@ -31,7 +32,7 @@ def home(request):
 
 @login_required()
 def start_game(request):
-    title = 'Insurance Pricing Game: Start Game'
+    title = ': Start Game'
     template_name = 'Pricing/start_game.html'
     context = dict()
     form = None
@@ -296,13 +297,13 @@ def game_list(request):
 
 @transaction.atomic()
 @login_required()
-def join_group_game(request, game_key):
+def join_group_game(request, game_id):
     title = 'Insurance Pricing Game: Join Group Game'
     template_name = 'Pricing/join_group_game.html'
     context = dict()
     user = request.user
 
-    game = get_object_or_404(IndivGames, game_id=game_key)
+    game = get_object_or_404(IndivGames, game_id=game_id)
 
     current_players = Players.objects.filter(game=game, player_type__in=['user', 'human']).count()
     game.additional_players_needed = game.human_player_cnt - current_players
@@ -358,7 +359,6 @@ def observe(request):
         )
     )
 
-
     # All accessible (observable) games
     accessible_games = [game for game in all_games]
 
@@ -374,6 +374,57 @@ def observe(request):
 
 
 @login_required()
-def game_dashboard(request, game_key):
+def game_dashboard(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames, game_id=game_key, initiator=user)
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    template_name = 'Pricing/dashboard.html'
+    context = {
+        'title': ' - Dashboard',
+        'game': game,
+    }
+    return render(request, template_name, context)
+
+
+@login_required
+@csrf_exempt
+def send_message(request):
+    if request.method == 'POST':
+        game_id = request.POST.get('game_id')  # Get game_id from POST data
+        content = request.POST.get('message')
+        from_user = request.user
+
+        message = ChatMessage(
+            from_user=from_user,
+            game_id=IndivGames.objects.get(game_id=game_id),
+            content=content
+        )
+        message.save()
+
+        return JsonResponse({"message": content})
+
+
+@login_required
+def fetch_messages(request):
+    if request.method == 'GET':
+        game_id = request.GET.get('game_id')
+        latest_sequence = int(request.GET.get('latest_sequence', 0))
+
+        messages = ChatMessage.objects.filter(
+            game_id=game_id,
+            sequence_number__gt=latest_sequence
+        ).order_by('sequence_number')[:50]
+
+        message_list = []
+        for msg in messages:
+            # Perform timezone conversion to Django's default timezone
+            timestamp_with_timezone = timezone.localtime(msg.timestamp)
+
+            message_list.append({
+                'from_sender': msg.from_user.username,
+                'time': timestamp_with_timezone.strftime('%Y-%m-%d %H:%M:%S'),
+                'content': msg.content,
+                'sequence_number': msg.sequence_number
+            })
+
+        return JsonResponse({"messages": message_list})

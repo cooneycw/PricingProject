@@ -30,3 +30,14 @@ class Players(models.Model):
     player_id_display = models.IntegerField()
     player_type = models.CharField(max_length=16)
     profile = models.CharField(max_length=16)
+
+
+class ChatMessage(models.Model):
+    sequence_number = models.AutoField(primary_key=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    from_user = models.ForeignKey(User, null=True, blank=True, related_name='from_user', on_delete=models.SET_NULL)
+    game_id = models.ForeignKey(IndivGames, db_column='game_id', related_name='chat_messages', on_delete=models.CASCADE)
+    content = models.TextField()
+
+    class Meta:
+        ordering = ['-sequence_number']  # Negative sign to order by descending

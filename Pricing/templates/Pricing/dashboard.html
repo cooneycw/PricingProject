@@ -1,0 +1,110 @@
+{% extends "Pricing/base_enh.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% block content %}
+    <main class="page landing-page">
+        <section class="clean-block clean-info dark">
+            <div class="container">
+                <div class="block-heading" style="text-align:center">
+                    <div class="container">
+                        <div class="row">
+                            <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
+                                <h5>Message Centre</h5>
+                                <div id="chat-example" class="block-heading" style="text-align:left; border: 3px solid #2196F3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                    <!-- Chat interface -->
+                                    <input id="chat-message-input" type="text" placeholder="Enter your message">
+                                    <button id="chat-message-submit" class="btn btn-outline-dark btn-sm action-button">Send</button>
+                                    <div id="chat-log" style="text-align: left">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>Reports</h5>
+                                <div class="report-icons">
+                                    <a href="#" class="report-icon"><img src="icon1.png" alt="Report 1"></a>
+                                    <a href="#" class="report-icon"><img src="icon2.png" alt="Report 2"></a>
+                                    <a href="#" class="report-icon"><img src="icon3.png" alt="Report 3"></a>
+                                    <a href="#" class="report-icon"><img src="icon4.png" alt="Report 4"></a>
+                                    <a href="#" class="report-icon"><img src="icon5.png" alt="Report 5"></a>
+                                    <a href="#" class="report-icon"><img src="icon6.png" alt="Report 6"></a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <!-- JavaScript to enable AJAX-based chat -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            const gameId = "{{ game.game_id }}";  // You can pass game_id through the Django context
+            const user = "{{ user.username }}";
+
+        $('#chat-message-submit').click(function() {
+            const message = $('#chat-message-input').val();
+            const user = "{{ user.username }}";
+            const now = new Date();
+
+            // Convert to America/New_York time zone and format the string
+            const options = { timeZone: "America/New_York", year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            const currentTime = now.toISOString().split('T')[0] + " " + now.toTimeString().split(' ')[0];
+
+            $.ajax({
+                url: '/send_message/',
+                method: 'POST',
+                data: {
+                    message: message,
+                    game_id: gameId,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                },
+                success: function(data) {
+                    // No need to append the message to the chat log
+                    $('#chat-message-input').val(''); // Clear the input
+                }
+            });
+        });
+
+            // Function to fetch messages
+            function fetchMessages() {
+                $.ajax({
+                    url: '/fetch_messages/',
+                    method: 'GET',
+                    data: {
+                        game_id: gameId,
+                    },
+                    success: function(data) {
+                        $('#chat-log').html('');  // Clear the chat log
+                        data.messages.forEach(function(message) {
+                            let row = `${message.from_sender} ${message.time}: ${message.content}`;
+                            $('#chat-log').prepend('<div class="chat-row">' + row + '</div>');  // Prepend to keep newest messages on top
+                        });
+                    }
+                });
+            }
+
+            // Call immediately to populate on page load
+            fetchMessages();
+
+            // Poll for new messages every 2 seconds
+            setInterval(fetchMessages, 2000);
+        });
+    </script>
+<style>
+  #chat-log {
+    height: 200px;
+    overflow-y: auto;
+    font-family: monospace;
+  }
+  .chat-row {
+    white-space: pre;
+  }
+  .report-icons {
+    display: flex;
+    justify-content: space-between; /* Equally space items */
+    align-items: center; /* Center items vertically */
+    margin-top: 20px; /* Add some spacing between the message box and icons */
+    }
+</style>
+{% endblock content %}

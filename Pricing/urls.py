@@ -7,7 +7,9 @@ urlpatterns = [
     path('individual/', views.individual, name='Pricing-individual'),
     path('group/', views.group, name='Pricing-group'),
     path('game_list/', views.game_list, name='Pricing-game_list'),
-    path('game_dashboard/<str:game_key>/', views.game_dashboard, name='Pricing-game_dashboard'),
-    path('join_group_game/<str:game_key>/', views.join_group_game, name='Pricing-join_group_game'),
+    path('game_dashboard/<str:game_id>/', views.game_dashboard, name='Pricing-game_dashboard'),
+    path('join_group_game/<str:game_id>/', views.join_group_game, name='Pricing-join_group_game'),
     path('observe/', views.observe, name='Pricing-observe'),
+    path('send_message/', views.send_message, name='send_message'),
+    path('fetch_messages/', views.fetch_messages, name='fetch_messages'),
     ]

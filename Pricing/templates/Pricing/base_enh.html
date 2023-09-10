@@ -15,7 +15,12 @@
 </head>
 <body>
     <nav class="navbar navbar-expand-lg fixed-top bg-body clean-navbar navbar-light">
-        <div class="container"><img src="{% static 'Pricing/lagrange_mult.png' %}" style="max-width: auto;height: 49px;"><a class="navbar-brand logo" href="{% url 'Pricing-home' %}">Insurance Pricing Game</a><button data-bs-toggle="collapse" class="navbar-toggler" data-bs-target="#navcol-1"><span class="visually-hidden">Toggle navigation</span><span class="navbar-toggler-icon"></span></button>
+        <div class="container"><img src="{% static 'Pricing/lagrange_mult.png' %}" style="max-width: auto;height: 49px;">
+            <a class="navbar-brand logo" href="{% url 'Pricing-home' %}">Insurance Pricing Game</a>
+            <button data-bs-toggle="collapse" class="navbar-toggler" data-bs-target="#navcol-1">
+                <span class="visually-hidden">Toggle navigation</span>
+                <span class="navbar-toggler-icon"></span>
+            </button>
             <div class="collapse navbar-collapse" id="navcol-1">
                 <ul class="navbar-nav ms-auto">
                     {% if user.is_authenticated %}

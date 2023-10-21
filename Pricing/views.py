@@ -1,4 +1,5 @@
 import uuid
+import pytz
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
@@ -386,6 +387,19 @@ def game_dashboard(request, game_id):
     return render(request, template_name, context)
 
 
+@login_required()
+def written_premium_report(request, game_id):
+    user = request.user
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    template_name = 'Pricing/written_premium_report.html'
+    context = {
+        'title': ' - Written Premium Report',
+        'game': game,
+    }
+    return render(request, template_name, context)
+
+
 @login_required
 @csrf_exempt
 def send_message(request):
@@ -419,10 +433,10 @@ def fetch_messages(request):
         for msg in messages:
             # Perform timezone conversion to Django's default timezone
             timestamp_with_timezone = timezone.localtime(msg.timestamp)
-
+            from_sender = msg.from_user.username if msg.from_user else "game_server"
             message_list.append({
-                'from_sender': msg.from_user.username,
-                'time': timestamp_with_timezone.strftime('%Y-%m-%d %H:%M:%S'),
+                'from_sender': from_sender,
+                'time': timestamp_with_timezone.strftime('%H:%M:%S'),
                 'content': msg.content,
                 'sequence_number': msg.sequence_number
             })

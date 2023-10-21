@@ -19,14 +19,26 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <h5>Reports</h5>
-                                <div class="report-icons">
-                                    <a href="#" class="report-icon"><img src="icon1.png" alt="Report 1"></a>
-                                    <a href="#" class="report-icon"><img src="icon2.png" alt="Report 2"></a>
-                                    <a href="#" class="report-icon"><img src="icon3.png" alt="Report 3"></a>
-                                    <a href="#" class="report-icon"><img src="icon4.png" alt="Report 4"></a>
-                                    <a href="#" class="report-icon"><img src="icon5.png" alt="Report 5"></a>
-                                    <a href="#" class="report-icon"><img src="icon6.png" alt="Report 6"></a>
+                                <h5>Decision Centre</h5>
+                                    <div class="row"> <!-- Additional nested row for the images -->
+                                        <div class="col-md-4 mb-3">
+                                            <a href="{% url 'Pricing-written_premium_report' game.game_id %}" class="report-icon" title="Written Premium Report"><img src="{% static 'Pricing/001_written_premium.png'  %}" alt="Written Premium Report"></a>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <a href="#" class="report-icon" title="Market Share Report"><img src="{% static 'Pricing/002_customer_growth.png'  %}" alt="Market Share Report"></a>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <a href="#" class="report-icon" title="Financial Statements"><img src="{% static 'Pricing/003_financials.png'  %}" alt="Financial Report"></a>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <a href="#" class="report-icon" title="Claim Report"><img src="{% static 'Pricing/004_claims.png'  %}" alt="Claim Report"></a>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <a href="#" class="report-icon" title="Segmentation Report"><img src="{% static 'Pricing/005_segmentation.png'  %}" alt="Segmentation Report"></a>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <a href="#" class="report-icon" title="Submit Decisions"><img src="{% static 'Pricing/006_decisions.png'  %}" alt="Decision Input"></a>
+                                        </div>
                                 </div>
                             </div>
                         </div>
@@ -76,10 +88,17 @@
                     },
                     success: function(data) {
                         $('#chat-log').html('');  // Clear the chat log
-                        data.messages.forEach(function(message) {
-                            let row = `${message.from_sender} ${message.time}: ${message.content}`;
-                            $('#chat-log').prepend('<div class="chat-row">' + row + '</div>');  // Prepend to keep newest messages on top
-                        });
+                    data.messages.forEach(function(message) {
+                        let row = `${message.from_sender} ${message.time}: ${message.content}`;
+
+                        if (message.from_sender === "game_server" && message.content === "Review decisions.") {
+                            $('#chat-log').prepend('<div class="chat-row game-server special-message">' + row + '</div>');
+                        } else if (message.from_sender === "game_server") {
+                            $('#chat-log').prepend('<div class="chat-row game-server">' + row + '</div>');
+                        } else {
+                            $('#chat-log').prepend('<div class="chat-row">' + row + '</div>');
+                        }
+                    });
                     }
                 });
             }
@@ -106,5 +125,11 @@
     align-items: center; /* Center items vertically */
     margin-top: 20px; /* Add some spacing between the message box and icons */
     }
+  .game-server {
+    color: blue;
+  }
+  .special-message {
+    color: red;
+  }
 </style>
 {% endblock content %}

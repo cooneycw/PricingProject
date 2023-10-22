@@ -37,7 +37,7 @@ class Financials(models.Model):
     player_id = models.ForeignKey(User, on_delete=models.CASCADE)
     year = models.IntegerField()
     written_premium = models.DecimalField(max_digits=10, decimal_places=2)
-    in_force = models.DecimalField(max_digits=10, decimal_places=2)
+    in_force = models.DecimalField(max_digits=10, decimal_places=0)
 
 
 class ChatMessage(models.Model):

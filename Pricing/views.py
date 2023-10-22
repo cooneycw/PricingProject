@@ -1,5 +1,6 @@
 import uuid
 import pytz
+import pandas as pd
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
@@ -402,16 +403,54 @@ def financials_report(request, game_id):
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
     selected_year = request.GET.get('year')  # Get the selected year from the query parameters
-    if selected_year:
-        filtered_data = financial_data.filter(year=selected_year)
+
+    if unique_years:  # Proceed if there are any financial years available
+        # Querying the database
+        financial_data_list = list(
+            financial_data.values('year', 'written_premium', 'in_force'))  # add more fields as necessary
+
+        # Creating a DataFrame from the obtained data
+        df = pd.DataFrame(financial_data_list)
+
+        if not df.empty:
+            # Filter out only the rows belonging to the latest four years
+            latest_years = df['year'].unique()  # Get all unique years
+            latest_years = sorted(latest_years, reverse=True)[:4]  # Sort and pick the latest four years
+            df_latest = df[df['year'].isin(latest_years)]  # Filter the DataFrame based on the latest four years
+
+            # Transposing the DataFrame to get years as columns and metrics as rows
+            transposed_df = df_latest.set_index('year').T  # Set 'year' as index before transposing
+
+            # Now, we'll go through each row in the transposed DataFrame, rename it, and apply specific formatting
+            for index, row in transposed_df.iterrows():
+                if index == 'written_premium':
+                    # Rename and format the 'written_premium' row
+                    new_row_name = 'Written Premium'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"${int(x):,}")  # formatting as currency without decimals
+                elif index == 'in_force':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'In-force'
+                    transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
+
+                # Apply renaming to make the index/rows human-readable
+                transposed_df.rename(index={index: new_row_name}, inplace=True)
+
+                # Continue with additional conditions for more rows as needed
+
+            # Convert the final, formatted DataFrame to HTML for rendering
+            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='center',
+                                                         index=True)
+        else:
+            financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:
-        filtered_data = financial_data.filter(year=latest_year)
+        financial_data_table = '<p>No financial data available.</p>'
 
     context = {
         'title': ' - Financial Report',
         'game': game,
-        'financial_data': filtered_data,
-        'has_financial_data': filtered_data.exists(),
+        'financial_data_table': financial_data_table,
+        'has_financial_data': financial_data.exists(),
         'unique_years': unique_years,
         'latest_year': latest_year,
         'selected_year': int(selected_year) if selected_year else None,  # Convert selected_year to int if it's not None

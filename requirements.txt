@@ -5,3 +5,4 @@ django==4.1
 django-channels==0.7.0
 django-crispy-forms==2.0
 numpy==1.25.2
+pandas==2.1.1

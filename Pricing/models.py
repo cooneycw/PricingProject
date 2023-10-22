@@ -33,11 +33,12 @@ class Players(models.Model):
 
 
 class Financials(models.Model):
-    game_id = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
-    player_id = models.ForeignKey(User, on_delete=models.CASCADE)
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
     year = models.IntegerField()
-    written_premium = models.DecimalField(max_digits=10, decimal_places=2)
-    in_force = models.DecimalField(max_digits=10, decimal_places=0)
+    written_premium = models.DecimalField(max_digits=18, decimal_places=2)
+    in_force = models.DecimalField(max_digits=16, decimal_places=0)
 
 
 class ChatMessage(models.Model):

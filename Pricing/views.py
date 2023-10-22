@@ -171,7 +171,6 @@ def group(request):
     for game in accessible_games:
         game.additional_players_needed = game.human_player_cnt - game.current_human_player_cnt
 
-
     if request.method == 'POST':
         form = GamePrefsForm(request.POST)
         if form.is_valid():
@@ -394,11 +393,28 @@ def financials_report(request, game_id):
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
 
     financial_data = Financials.objects.filter(game_id=game, player_id=user)
-
+    unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()[:4]
+    latest_year = unique_years[0] if unique_years else None
     template_name = 'Pricing/financials_report.html'
+
+    # Check for 'Back to Game Select' POST request
+    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    selected_year = request.GET.get('year')  # Get the selected year from the query parameters
+    if selected_year:
+        filtered_data = financial_data.filter(year=selected_year)
+    else:
+        filtered_data = financial_data.filter(year=latest_year)
+
     context = {
         'title': ' - Financial Report',
         'game': game,
+        'financial_data': filtered_data,
+        'has_financial_data': filtered_data.exists(),
+        'unique_years': unique_years,
+        'latest_year': latest_year,
+        'selected_year': int(selected_year) if selected_year else None,  # Convert selected_year to int if it's not None
     }
     return render(request, template_name, context)
 

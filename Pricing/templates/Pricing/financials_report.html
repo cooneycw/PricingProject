@@ -8,39 +8,28 @@
                 <div class="block-heading" style="text-align:center">
                     <form method="POST">
                         {% csrf_token %}
-                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Game Select" value="Back to Game Select"></input>
-                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Refresh Listing" value="Refresh Listing"></input>
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
                     </form>
                 </div>
                 <div class="block-heading" style="text-align: left">
-                    <h3>Activated Games (pending start on the server / more players):</h3>
-                    <ul>
-                        {% for game in active_games %}
-                            <li>
-                                {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.game_type }}
-                                {% if game.game_type != "individual" %}
-                                     [waiting on {{ game.additional_players_needed }}]
-                                {% endif %}
-                            </li>
-                            {% empty %}
-                                <li>No activated games presently.</li>
-                                <br/>
-                        {% endfor %}
-                    </ul>
-                    <h3>Click to View Game Details:</h3>
-                    <ul id="accessible-games-list">
-                        {% for game in accessible_games %}
-                            <li>
-                                <a href="{% url 'Pricing-game_dashboard' game_id=game.game_id %}">
-                                    {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.game_type }}
-                                </a>
-                            </li>
-                            {% empty %}
-                                <li>No games completed / running presently.</li>
-                                <br/>
-                        {% endfor %}
-                    </ul>
+                    {% if not has_financial_data %}
+                        <p>Financial data processing not yet complete.  Please await notification in the Message Centre.</p>
+                    {% endif %}
                 </div>
+                {% if has_financial_data %}
+                <div class="block-heading" style="text-align: left">
+                        <h3>Select Year:</h3>
+                        <form method="GET" action="">
+                            <label for="year">Choose a Year:</label>
+                            <select id="year" name="year">
+                                {% for year in unique_years %}
+                                    <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="submit" value="Select">
+                        </form>
+                    </div>
+                {% endif %}
             </div>
         </section>
     </main>

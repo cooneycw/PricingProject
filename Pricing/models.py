@@ -32,6 +32,14 @@ class Players(models.Model):
     profile = models.CharField(max_length=16)
 
 
+class Financials(models.Model):
+    game_id = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE)
+    year = models.IntegerField()
+    written_premium = models.DecimalField(max_digits=10, decimal_places=2)
+    in_force = models.DecimalField(max_digits=10, decimal_places=2)
+
+
 class ChatMessage(models.Model):
     sequence_number = models.AutoField(primary_key=True)
     timestamp = models.DateTimeField(auto_now_add=True)

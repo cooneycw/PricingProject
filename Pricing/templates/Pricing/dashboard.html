@@ -22,13 +22,13 @@
                                 <h5>Decision Centre</h5>
                                     <div class="row"> <!-- Additional nested row for the images -->
                                         <div class="col-md-4 mb-3">
-                                            <a href="{% url 'Pricing-written_premium_report' game.game_id %}" class="report-icon" title="Written Premium Report"><img src="{% static 'Pricing/001_written_premium.png'  %}" alt="Written Premium Report"></a>
+                                            <a href="#" class="report-icon" title="Written Premium Report"><img src="{% static 'Pricing/001_written_premium.png'  %}" alt="Written Premium Report"></a>
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <a href="#" class="report-icon" title="Market Share Report"><img src="{% static 'Pricing/002_customer_growth.png'  %}" alt="Market Share Report"></a>
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <a href="#" class="report-icon" title="Financial Statements"><img src="{% static 'Pricing/003_financials.png'  %}" alt="Financial Report"></a>
+                                            <a href="{% url 'Pricing-financials_report' game.game_id %}" class="report-icon" title="Financial Statements"><img src="{% static 'Pricing/003_financials.png'  %}" alt="Financial Report"></a>
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <a href="#" class="report-icon" title="Claim Report"><img src="{% static 'Pricing/004_claims.png'  %}" alt="Claim Report"></a>

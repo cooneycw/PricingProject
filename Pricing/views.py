@@ -11,7 +11,7 @@ from django.db.models import Q, Count, Case, When, Value, CharField, Max
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
-from .models import GamePrefs, IndivGames, Players, ChatMessage
+from .models import GamePrefs, IndivGames, Players, Financials, ChatMessage
 
 
 # Create your views here.
@@ -388,13 +388,16 @@ def game_dashboard(request, game_id):
 
 
 @login_required()
-def written_premium_report(request, game_id):
+def financials_report(request, game_id):
     user = request.user
     game = get_object_or_404(IndivGames,
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
-    template_name = 'Pricing/written_premium_report.html'
+
+    financial_data = Financials.objects.filter(game_id=game, player_id=user)
+
+    template_name = 'Pricing/financials_report.html'
     context = {
-        'title': ' - Written Premium Report',
+        'title': ' - Financial Report',
         'game': game,
     }
     return render(request, template_name, context)

@@ -32,6 +32,17 @@ class Players(models.Model):
     profile = models.CharField(max_length=16)
 
 
+class MktgSales(models.Model):
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
+    year = models.IntegerField()
+    beg_in_force = models.DecimalField(max_digits=16, decimal_places=0)
+    mktg_expense = models.DecimalField(max_digits=18, decimal_places=2)
+    mktg_expense_ind = models.DecimalField(max_digits=18, decimal_places=2)
+    end_in_force = models.DecimalField(max_digits=16, decimal_places=0)
+
+
 class Financials(models.Model):
     game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
     player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
@@ -39,6 +50,7 @@ class Financials(models.Model):
     year = models.IntegerField()
     written_premium = models.DecimalField(max_digits=18, decimal_places=2)
     in_force = models.DecimalField(max_digits=16, decimal_places=0)
+    mktg_expense = models.DecimalField(max_digits=18, decimal_places=2)
 
 
 class ChatMessage(models.Model):

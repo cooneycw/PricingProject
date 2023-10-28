@@ -17,13 +17,13 @@
                     </div>
                 {% endif %}
                 {% if has_financial_data %}
-                    <div class="block-heading" style="text-align: left; margin-top: 2px;"> <!-- Added some top margin -->
-                        <div style="padding-left: 20px;"> <!-- Wrapper with padding for whitespace -->
+                    <div class="block-heading" style="text-align: left; margin-top: 2px; "> <!-- Added some top margin -->
+                        <div style="padding-left: 20px;  margin-bottom: 20px;"> <!-- Wrapper with padding for whitespace -->
                             <form method="GET" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
                                 <div style="margin-right: 15px; width: 300px;"> <!-- Constrained width for the question text -->
                                     <label for="year">Latest Financial Year for Display:</label>
                                 </div>
-                                <div style="margin-right: 15px;"> <!-- Whitespace before the selector -->
+                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
                                     <select id="year" name="year">
                                         {% for year in unique_years %}
                                             <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
@@ -32,7 +32,8 @@
                                 </div>
                                 <input type="submit" value="Select">
                             </form>
-                            <div>
+                            <hr>
+                            <div class="financial-data-table">
                                 {{ financial_data_table|safe }}
                             </div>
                         </div>

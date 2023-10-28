@@ -407,7 +407,7 @@ def financials_report(request, game_id):
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
         financial_data_list = list(
-            financial_data.values('year', 'written_premium', 'in_force'))  # add more fields as necessary
+            financial_data.values('year', 'written_premium', 'in_force', 'mktg_expense'))  # add more fields as necessary
 
         # Creating a DataFrame from the obtained data
         df = pd.DataFrame(financial_data_list)
@@ -432,6 +432,11 @@ def financials_report(request, game_id):
                     # Rename and format the 'in_force' row
                     new_row_name = 'In-force'
                     transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
+                elif index == 'mktg_expense':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Marketing Expense'
+                    transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
+
 
                 # Apply renaming to make the index/rows human-readable
                 transposed_df.rename(index={index: new_row_name}, inplace=True)
@@ -439,8 +444,15 @@ def financials_report(request, game_id):
                 # Continue with additional conditions for more rows as needed
 
             # Convert the final, formatted DataFrame to HTML for rendering
-            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='center',
+            if len(transposed_df.columns) < 4:
+                # If there are fewer than four years of data, we'll simulate the rest as empty columns
+                missing_years = 4 - len(transposed_df.columns)
+                for i in range(missing_years):
+                    transposed_df[f'{latest_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
+
+            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
+
         else:
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:

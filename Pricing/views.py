@@ -12,7 +12,7 @@ from django.db.models import Q, Count, Case, When, Value, CharField, Max
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
-from .models import GamePrefs, IndivGames, Players, Financials, ChatMessage
+from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, ChatMessage
 
 
 # Create your views here.
@@ -388,6 +388,116 @@ def game_dashboard(request, game_id):
 
 
 @login_required()
+def mktgsales_report(request, game_id):
+    user = request.user
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+
+    financial_data = MktgSales.objects.filter(game_id=game, player_id=user)
+    unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()[:4]
+    latest_year = unique_years[0] if unique_years else None
+    template_name = 'Pricing/mktgsales_report.html'
+
+    # Check for 'Back to Game Select' POST request
+    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    selected_year = request.GET.get('year')  # Get the selected year from the query parameters
+
+    if unique_years:  # Proceed if there are any financial years available
+        # Querying the database
+        financial_data_list = list(
+            financial_data.values('year', 'beg_in_force', 'mktg_expense', 'mktg_expense_ind', 'end_in_force'))  # add more fields as necessary
+
+        # Creating a DataFrame from the obtained data
+        df = pd.DataFrame(financial_data_list)
+
+        if not df.empty:
+            # Filter out only the rows belonging to the latest four years
+            latest_years = df['year'].unique()  # Get all unique years
+            latest_years = sorted(latest_years, reverse=True)[:4]  # Sort and pick the latest four years
+            df_latest = df[df['year'].isin(latest_years)]  # Filter the DataFrame based on the latest four years
+
+            # Transposing the DataFrame to get years as columns and metrics as rows
+            transposed_df = df_latest.set_index('year').T  # Set 'year' as index before transposing
+            percentage_data = {}
+
+            # Now, we'll go through each row in the transposed DataFrame, rename it, and apply specific formatting
+            for index, row in transposed_df.iterrows():
+                if index == 'beg_in_force':
+                    # Rename and format the 'written_premium' row
+                    new_row_name = 'Beginning-In-Force'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"{int(x):,}")  # formatting as currency without decimals
+                elif index == 'mktg_expense':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Marketing Expense'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${int(x):,}")  # formatting as an integer
+                elif index == 'mktg_expense_ind':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Industry Marketing Expense'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${int(x):,}")  # formatting as an integer
+                elif index == 'end_in_force':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Ending-In-force'
+                    transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
+
+                # Apply renaming to make the index/rows human-readable
+                transposed_df.rename(index={index: new_row_name}, inplace=True)
+
+                # Continue with additional conditions for more rows as needed
+
+            for year in transposed_df.columns:
+                # Convert the marketing expenses from string to float for calculation
+                marketing_expense = float(transposed_df.at['Marketing Expense', year].replace('$', '').replace(',', ''))
+                industry_marketing_expense = float(
+                    transposed_df.at['Industry Marketing Expense', year].replace('$', '').replace(',', ''))
+
+                # Calculate the percentage (ensuring not to divide by zero)
+                if industry_marketing_expense > 0:
+                    percentage = (marketing_expense / industry_marketing_expense) * 100
+                else:
+                    percentage = 0  # or None, or however you wish to represent this edge case
+
+                # Store the calculated percentage in our dictionary
+                percentage_data[year] = f"{percentage:.2f}%"  # formatted to two decimal places
+            percentage_df = pd.DataFrame(percentage_data, index=['Marketing Spend as % of Industry'])
+            insert_position = transposed_df.index.get_loc('Industry Marketing Expense') + 1
+            # Split the original DataFrame
+            df_top = transposed_df.iloc[:insert_position]
+            df_bottom = transposed_df.iloc[insert_position:]
+
+            # Concatenate everything: the top part, the new row, and the bottom part
+            transposed_df_new = pd.concat([df_top, percentage_df, df_bottom])
+
+            # Convert the final, formatted DataFrame to HTML for rendering
+            if len(transposed_df_new.columns) < 4:
+                # If there are fewer than four years of data, we'll simulate the rest as empty columns
+                missing_years = 4 - len(transposed_df_new.columns)
+                for i in range(missing_years):
+                    transposed_df_new[f'{latest_year - i - 1} '] = ['' for _ in range(len(transposed_df_new.index))]
+
+            financial_data_table = transposed_df_new.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                         index=True)
+
+        else:
+            financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
+    else:
+        financial_data_table = '<p>No financial data available.</p>'
+
+    context = {
+        'title': ' - Marketing / Sales Report',
+        'game': game,
+        'financial_data_table': financial_data_table,
+        'has_financial_data': financial_data.exists(),
+        'unique_years': unique_years,
+        'latest_year': latest_year,
+        'selected_year': int(selected_year) if selected_year else None,  # Convert selected_year to int if it's not None
+    }
+    return render(request, template_name, context)
+
+
+@login_required()
 def financials_report(request, game_id):
     user = request.user
     game = get_object_or_404(IndivGames,
@@ -435,7 +545,7 @@ def financials_report(request, game_id):
                 elif index == 'mktg_expense':
                     # Rename and format the 'in_force' row
                     new_row_name = 'Marketing Expense'
-                    transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
+                    transposed_df.loc[index] = row.apply(lambda x: f"${int(x):,}")  # formatting as an integer
 
 
                 # Apply renaming to make the index/rows human-readable

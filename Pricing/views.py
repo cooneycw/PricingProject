@@ -517,7 +517,8 @@ def financials_report(request, game_id):
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
         financial_data_list = list(
-            financial_data.values('year', 'written_premium', 'in_force', 'mktg_expense'))  # add more fields as necessary
+            financial_data.values('year', 'written_premium', 'in_force', 'inv_income', 'annual_expenses',
+                                  'cy_losses'))  # add more fields as necessary
 
         # Creating a DataFrame from the obtained data
         df = pd.DataFrame(financial_data_list)
@@ -529,29 +530,35 @@ def financials_report(request, game_id):
             df_latest = df[df['year'].isin(latest_years)]  # Filter the DataFrame based on the latest four years
 
             # Transposing the DataFrame to get years as columns and metrics as rows
-            transposed_df = df_latest.set_index('year').T  # Set 'year' as index before transposing
+            df_latest.rename(columns={"year": "Year"}, inplace=True)
 
+            transposed_df = df_latest.set_index('Year').T  # Set 'year' as index before transposing
             # Now, we'll go through each row in the transposed DataFrame, rename it, and apply specific formatting
             for index, row in transposed_df.iterrows():
                 if index == 'written_premium':
                     # Rename and format the 'written_premium' row
                     new_row_name = 'Written Premium'
                     transposed_df.loc[index] = row.apply(
-                        lambda x: f"${int(x):,}")  # formatting as currency without decimals
+                        lambda x: f"${round(x):,}")  # formatting as currency without decimals
                 elif index == 'in_force':
                     # Rename and format the 'in_force' row
                     new_row_name = 'In-force'
                     transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
-                elif index == 'mktg_expense':
+                elif index == 'inv_income':
                     # Rename and format the 'in_force' row
-                    new_row_name = 'Marketing Expense'
-                    transposed_df.loc[index] = row.apply(lambda x: f"${int(x):,}")  # formatting as an integer
-
+                    new_row_name = 'Investment Income'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'annual_expenses':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Expenses'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'cy_losses':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Claims Incurred'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
 
                 # Apply renaming to make the index/rows human-readable
                 transposed_df.rename(index={index: new_row_name}, inplace=True)
-
-                # Continue with additional conditions for more rows as needed
 
             # Convert the final, formatted DataFrame to HTML for rendering
             if len(transposed_df.columns) < 4:
@@ -560,6 +567,10 @@ def financials_report(request, game_id):
                 for i in range(missing_years):
                     transposed_df[f'{latest_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
 
+            index = 2
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
 

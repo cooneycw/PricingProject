@@ -50,7 +50,9 @@ class Financials(models.Model):
     year = models.IntegerField()
     written_premium = models.DecimalField(max_digits=18, decimal_places=2)
     in_force = models.DecimalField(max_digits=16, decimal_places=0)
-    mktg_expense = models.DecimalField(max_digits=18, decimal_places=2)
+    inv_income = models.DecimalField(max_digits=18, decimal_places=2)
+    annual_expenses = models.DecimalField(max_digits=18, decimal_places=2)
+    cy_losses = models.DecimalField(max_digits=18, decimal_places=2)
 
 
 class ChatMessage(models.Model):

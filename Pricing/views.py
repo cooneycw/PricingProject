@@ -518,7 +518,7 @@ def financials_report(request, game_id):
         # Querying the database
         financial_data_list = list(
             financial_data.values('year', 'written_premium', 'in_force', 'inv_income', 'annual_expenses',
-                                  'cy_losses'))  # add more fields as necessary
+                                  'ay_losses', 'py_devl'))  # add more fields as necessary
 
         # Creating a DataFrame from the obtained data
         df = pd.DataFrame(financial_data_list)
@@ -552,9 +552,13 @@ def financials_report(request, game_id):
                     # Rename and format the 'in_force' row
                     new_row_name = 'Expenses'
                     transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'cy_losses':
+                elif index == 'ay_losses':
                     # Rename and format the 'in_force' row
-                    new_row_name = 'Claims Incurred'
+                    new_row_name = 'Acc Yr Claims Incurred'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'py_devl':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Prior Yr Development'
                     transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
 
                 # Apply renaming to make the index/rows human-readable

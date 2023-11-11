@@ -59,8 +59,12 @@
                     // If empty, insert a non-breaking space character
                     cell.innerHTML = '&nbsp;';
                 }
+
+                // Apply the monospaced font to each cell
+                cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
             });
         });
     });
 </script>
+
 {% endblock content %}

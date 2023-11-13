@@ -54,6 +54,11 @@ class Financials(models.Model):
     annual_expenses = models.DecimalField(max_digits=18, decimal_places=2)
     ay_losses = models.DecimalField(max_digits=18, decimal_places=2)
     py_devl = models.DecimalField(max_digits=18, decimal_places=2)
+    profit = models.DecimalField(max_digits=18, decimal_places=2)
+    dividend_paid = models.DecimalField(max_digits=18, decimal_places=2)
+    capital = models.DecimalField(max_digits=18, decimal_places=2)
+    capital_ratio = models.DecimalField(max_digits=18, decimal_places=5)
+    capital_test = models.CharField(max_length=4, null=True, blank=True)
 
 
 class ChatMessage(models.Model):

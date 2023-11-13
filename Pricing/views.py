@@ -518,7 +518,8 @@ def financials_report(request, game_id):
         # Querying the database
         financial_data_list = list(
             financial_data.values('year', 'written_premium', 'in_force', 'inv_income', 'annual_expenses',
-                                  'ay_losses', 'py_devl'))  # add more fields as necessary
+                                  'ay_losses', 'py_devl', 'profit', 'dividend_paid',
+                                  'capital', 'capital_ratio', 'capital_test'))  # add more fields as necessary
 
         # Creating a DataFrame from the obtained data
         df = pd.DataFrame(financial_data_list)
@@ -560,6 +561,25 @@ def financials_report(request, game_id):
                     # Rename and format the 'in_force' row
                     new_row_name = 'Prior Yr Development'
                     transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'profit':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Profit'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'dividend_paid':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Dividend Paid'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'capital':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Ending Capital'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'capital_ratio':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'MCT Ratio'
+                    transposed_df.loc[index] = row.apply(lambda x: f"{round(x * 100, 1)}%")  # formatting as an integer
+                elif index == 'capital_test':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'MCT Test'
 
                 # Apply renaming to make the index/rows human-readable
                 transposed_df.rename(index={index: new_row_name}, inplace=True)

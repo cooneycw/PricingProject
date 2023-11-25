@@ -17,9 +17,9 @@ class GamePrefsForm(forms.ModelForm):
         std_dev = round(mean_val * CONFIG_STD_DEV)
 
         self.fields['human_player_cnt'].initial = int(2)
-        self.fields['sel_type_01'].initial = int(np.random.normal(mean_val, std_dev))
-        self.fields['sel_type_02'].initial = int(np.random.normal(mean_val, std_dev))
-        self.fields['sel_type_03'].initial = int(np.random.normal(mean_val, std_dev))
+        self.fields['sel_type_01'].initial = 2 # int(np.random.normal(mean_val, std_dev))
+        self.fields['sel_type_02'].initial = 3 # int(np.random.normal(mean_val, std_dev))
+        self.fields['sel_type_03'].initial = 4 # int(np.random.normal(mean_val, std_dev))
 
     human_player_cnt = forms.ChoiceField(choices=CHOICES, label="Human Players:", required=False)
     sel_type_01 = forms.ChoiceField(choices=CHOICES, label="CPU w Growth profile:")

@@ -61,7 +61,17 @@ def individual(request):
 
     if request.method == 'POST':
         form = GamePrefsForm(request.POST)
+        if request.POST.get('Back to Game Select') == 'Back to Game Select':
+            return redirect('Pricing-start')
+
         if form.is_valid():
+            total_companies = sum(int(form.cleaned_data[field]) for field in ['sel_type_01', 'sel_type_02', 'sel_type_03'])
+
+            if total_companies < 5:
+                messages.warning(request, "You must select at least 5 CPU companies in total.")
+                context['form'] = form
+                return render(request, template_name, context)
+
             game_prefs, created = GamePrefs.objects.update_or_create(
                 user=user,
                 defaults={
@@ -72,8 +82,6 @@ def individual(request):
                 }
             )
 
-        if request.POST.get('Back to Game Select') == 'Back to Game Select':
-            return redirect('Pricing-start')
         if request.POST.get('Start Game') == 'Start Game':
             unique_game_id = str(uuid.uuid4())
 
@@ -408,7 +416,9 @@ def mktgsales_report(request, game_id):
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
         financial_data_list = list(
-            financial_data.values('year', 'beg_in_force', 'mktg_expense', 'mktg_expense_ind', 'end_in_force'))  # add more fields as necessary
+            financial_data.values('year', 'beg_in_force',
+                                  'mktg_expense', 'mktg_expense_ind', 'avg_prem',
+                                  'quotes', 'sales', 'canx', 'end_in_force'))  # add more fields as necessary
 
         # Creating a DataFrame from the obtained data
         df = pd.DataFrame(financial_data_list)
@@ -428,7 +438,8 @@ def mktgsales_report(request, game_id):
             # Transposing the DataFrame to get years as columns and metrics as rows
             transposed_df = df_latest.set_index('year').T  # Set 'year' as index before transposing
             percentage_data = {}
-
+            close_ratio_data = {}
+            retention_ratio_data = {}
             # Now, we'll go through each row in the transposed DataFrame, rename it, and apply specific formatting
             for index, row in transposed_df.iterrows():
                 if index == 'beg_in_force':
@@ -444,9 +455,22 @@ def mktgsales_report(request, game_id):
                     # Rename and format the 'in_force' row
                     new_row_name = 'Industry Marketing Expense'
                     transposed_df.loc[index] = row.apply(lambda x: f"${int(x):,}")  # formatting as an integer
+                elif index == 'avg_prem':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Average Premium'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${x:,.2f}")  # formatting as an integer
+                elif index == 'quotes':
+                    new_row_name = 'Quotes'
+                    transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as currency without decimals
+                elif index == 'sales':
+                    new_row_name = 'Sales'
+                    transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as currency without decimals
+                elif index == 'canx':
+                    new_row_name = 'Cancellations'
+                    transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as currency without decimals
                 elif index == 'end_in_force':
                     # Rename and format the 'in_force' row
-                    new_row_name = 'Ending-In-force'
+                    new_row_name = 'Ending-In-Force'
                     transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
 
                 # Apply renaming to make the index/rows human-readable
@@ -456,6 +480,10 @@ def mktgsales_report(request, game_id):
 
             for year in transposed_df.columns:
                 # Convert the marketing expenses from string to float for calculation
+                quotes = float(transposed_df.at['Quotes', year].replace(',', ''))
+                sales = float(transposed_df.at['Sales', year].replace(',', ''))
+                canx = float(transposed_df.at['Cancellations', year].replace(',', ''))
+                in_force = float(transposed_df.at['Beginning-In-Force', year].replace(',', ''))
                 marketing_expense = float(transposed_df.at['Marketing Expense', year].replace('$', '').replace(',', ''))
                 industry_marketing_expense = float(
                     transposed_df.at['Industry Marketing Expense', year].replace('$', '').replace(',', ''))
@@ -466,16 +494,41 @@ def mktgsales_report(request, game_id):
                 else:
                     percentage = 0  # or None, or however you wish to represent this edge case
 
+                if quotes > 0:
+                    close_ratio = (sales / quotes) * 100
+                else:
+                    close_ratio = 0  # or None, or however you wish to represent this edge case
+
+                if in_force > 0:
+                    retention_ratio = ((in_force - canx) / in_force) * 100
+                else:
+                    retention_ratio = 0
                 # Store the calculated percentage in our dictionary
                 percentage_data[year] = f"{percentage:.2f}%"  # formatted to two decimal places
+                close_ratio_data[year] = f"{close_ratio:.1f}%"  # formatted to one decimal places
+                retention_ratio_data[year] = f"{retention_ratio:.1f}%"  # formatted to one decimal places
             percentage_df = pd.DataFrame(percentage_data, index=['Marketing Spend as % of Industry'])
-            insert_position = transposed_df.index.get_loc('Industry Marketing Expense') + 1
+            close_ratio_df = pd.DataFrame(close_ratio_data, index=['Close Ratio'])
+            retention_ratio_df = pd.DataFrame(retention_ratio_data, index=['Retention Ratio'])
+            insert_position_mktg = transposed_df.index.get_loc('Industry Marketing Expense') + 1
+
             # Split the original DataFrame
-            df_top = transposed_df.iloc[:insert_position]
-            df_bottom = transposed_df.iloc[insert_position:]
+            df_top_mktg = transposed_df.iloc[:insert_position_mktg]
+            df_bottom_mktg = transposed_df.iloc[insert_position_mktg:]
 
             # Concatenate everything: the top part, the new row, and the bottom part
-            transposed_df_new = pd.concat([df_top, percentage_df, df_bottom])
+            transposed_df_mktg = pd.concat([df_top_mktg, percentage_df, df_bottom_mktg])
+
+            insert_position_close = transposed_df_mktg.index.get_loc('Sales') + 1
+            df_top_close = transposed_df_mktg.iloc[:insert_position_close]
+            df_bottom_close = transposed_df_mktg.iloc[insert_position_close:]
+            transposed_df_close = pd.concat([df_top_close, close_ratio_df, df_bottom_close])
+
+            insert_position_retention = transposed_df_close.index.get_loc('Cancellations') + 1
+            df_top_retention = transposed_df_close.iloc[:insert_position_retention]
+            df_bottom_retention = transposed_df_close.iloc[insert_position_retention:]
+
+            transposed_df_new = pd.concat([df_top_retention, retention_ratio_df, df_bottom_retention])
 
             # Convert the final, formatted DataFrame to HTML for rendering
             if len(transposed_df_new.columns) < 4:

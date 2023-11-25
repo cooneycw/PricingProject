@@ -40,6 +40,10 @@ class MktgSales(models.Model):
     beg_in_force = models.DecimalField(max_digits=16, decimal_places=0)
     mktg_expense = models.DecimalField(max_digits=18, decimal_places=2)
     mktg_expense_ind = models.DecimalField(max_digits=18, decimal_places=2)
+    quotes = models.DecimalField(max_digits=16, decimal_places=0)
+    sales = models.DecimalField(max_digits=16, decimal_places=0)
+    canx = models.DecimalField(max_digits=16, decimal_places=0)
+    avg_prem = models.DecimalField(max_digits=16, decimal_places=0)
     end_in_force = models.DecimalField(max_digits=16, decimal_places=0)
 
 

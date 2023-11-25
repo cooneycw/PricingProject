@@ -394,7 +394,7 @@ def mktgsales_report(request, game_id):
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
 
     financial_data = MktgSales.objects.filter(game_id=game, player_id=user)
-    unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()[:4]
+    unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()
     latest_year = unique_years[0] if unique_years else None
     template_name = 'Pricing/mktgsales_report.html'
 
@@ -403,6 +403,7 @@ def mktgsales_report(request, game_id):
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
     selected_year = request.GET.get('year')  # Get the selected year from the query parameters
+    selected_year = int(selected_year) if selected_year else None
 
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
@@ -413,10 +414,16 @@ def mktgsales_report(request, game_id):
         df = pd.DataFrame(financial_data_list)
 
         if not df.empty:
-            # Filter out only the rows belonging to the latest four years
-            latest_years = df['year'].unique()  # Get all unique years
-            latest_years = sorted(latest_years, reverse=True)[:4]  # Sort and pick the latest four years
-            df_latest = df[df['year'].isin(latest_years)]  # Filter the DataFrame based on the latest four years
+            if selected_year not in unique_years:
+                selected_year = latest_year
+                # Filter out only the rows belonging to the latest four years
+            all_data_years = df['year'].unique()  # Get all unique years
+            all_data_years = sorted(all_data_years, reverse=True)  # Sort and pick the latest four years
+            selected_years = sorted([yr for yr in all_data_years if yr <= selected_year], reverse=True)[:4]
+            df = df.sort_values('year', ascending=False)
+
+            # Creating a copy of the filtered DataFrame
+            df_latest = df[df['year'].isin(selected_years)].copy()
 
             # Transposing the DataFrame to get years as columns and metrics as rows
             transposed_df = df_latest.set_index('year').T  # Set 'year' as index before transposing
@@ -475,7 +482,7 @@ def mktgsales_report(request, game_id):
                 # If there are fewer than four years of data, we'll simulate the rest as empty columns
                 missing_years = 4 - len(transposed_df_new.columns)
                 for i in range(missing_years):
-                    transposed_df_new[f'{latest_year - i - 1} '] = ['' for _ in range(len(transposed_df_new.index))]
+                    transposed_df_new[f'{selected_year - i - 1} '] = ['' for _ in range(len(transposed_df_new.index))]
 
             financial_data_table = transposed_df_new.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
@@ -504,7 +511,7 @@ def financials_report(request, game_id):
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
 
     financial_data = Financials.objects.filter(game_id=game, player_id=user)
-    unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()[:4]
+    unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()
     latest_year = unique_years[0] if unique_years else None
     template_name = 'Pricing/financials_report.html'
 
@@ -513,6 +520,8 @@ def financials_report(request, game_id):
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
     selected_year = request.GET.get('year')  # Get the selected year from the query parameters
+    selected_year = int(selected_year) if selected_year else None
+
 
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
@@ -525,12 +534,18 @@ def financials_report(request, game_id):
         df = pd.DataFrame(financial_data_list)
 
         if not df.empty:
-            # Filter out only the rows belonging to the latest four years
-            latest_years = df['year'].unique()  # Get all unique years
-            latest_years = sorted(latest_years, reverse=True)[:4]  # Sort and pick the latest four years
-            df_latest = df[df['year'].isin(latest_years)]  # Filter the DataFrame based on the latest four years
+            if selected_year not in unique_years:
+                selected_year = latest_year
+                # Filter out only the rows belonging to the latest four years
+            all_data_years = df['year'].unique()  # Get all unique years
+            all_data_years = sorted(all_data_years, reverse=True)  # Sort and pick the latest four years
+            selected_years = sorted([yr for yr in all_data_years if yr <= selected_year], reverse=True)[:4]
+            df = df.sort_values('year', ascending=False)
 
-            # Transposing the DataFrame to get years as columns and metrics as rows
+            # Creating a copy of the filtered DataFrame
+            df_latest = df[df['year'].isin(selected_years)].copy()
+
+            # Renaming columns without 'inplace=True'
             df_latest.rename(columns={"year": "Year"}, inplace=True)
 
             transposed_df = df_latest.set_index('Year').T  # Set 'year' as index before transposing
@@ -589,7 +604,7 @@ def financials_report(request, game_id):
                 # If there are fewer than four years of data, we'll simulate the rest as empty columns
                 missing_years = 4 - len(transposed_df.columns)
                 for i in range(missing_years):
-                    transposed_df[f'{latest_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
+                    transposed_df[f'{selected_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
 
             index = 2
             blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)

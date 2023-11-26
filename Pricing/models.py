@@ -65,6 +65,14 @@ class Financials(models.Model):
     capital_test = models.CharField(max_length=4, null=True, blank=True)
 
 
+class Industry(models.Model):
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
+    year = models.IntegerField()
+    written_premium = models.DecimalField(max_digits=18, decimal_places=2)
+
+
 class ChatMessage(models.Model):
     sequence_number = models.AutoField(primary_key=True)
     timestamp = models.DateTimeField(auto_now_add=True)

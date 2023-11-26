@@ -683,6 +683,16 @@ def financials_report(request, game_id):
     return render(request, template_name, context)
 
 
+@login_required()
+def industry_reports(request, game_id):
+    user = request.user
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+
+    industry_data = Industry.objects.filter(game_id=game, player_id=user)
+
+
+
 @login_required
 @csrf_exempt
 def send_message(request):

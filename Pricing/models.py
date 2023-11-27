@@ -45,6 +45,7 @@ class MktgSales(models.Model):
     canx = models.DecimalField(max_digits=16, decimal_places=0)
     avg_prem = models.DecimalField(max_digits=18, decimal_places=2)
     end_in_force = models.DecimalField(max_digits=16, decimal_places=0)
+    in_force_ind = models.DecimalField(max_digits=16, decimal_places=0)
 
 
 class Financials(models.Model):
@@ -71,6 +72,12 @@ class Industry(models.Model):
     player_name = models.CharField(max_length=128, null=True, blank=True)
     year = models.IntegerField()
     written_premium = models.DecimalField(max_digits=18, decimal_places=2)
+    annual_expenses = models.DecimalField(max_digits=18, decimal_places=2)
+    cy_losses = models.DecimalField(max_digits=18, decimal_places=2)
+    profit = models.DecimalField(max_digits=18, decimal_places=2)
+    capital = models.DecimalField(max_digits=18, decimal_places=2)
+    capital_ratio = models.DecimalField(max_digits=18, decimal_places=5)
+    capital_test = models.CharField(max_length=4, null=True, blank=True)
 
 
 class ChatMessage(models.Model):

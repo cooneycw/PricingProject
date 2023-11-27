@@ -1,0 +1,55 @@
+{% extends "Pricing/base_enh.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% block content %}
+    <main class="page landing-page">
+        <section class="clean-block clean-info dark">
+            <div class="container">
+                <div class="block-heading" style="text-align:center; margin-bottom: 0;">
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
+                    </form>
+                </div>
+                {% if not has_financial_data %}
+                    <div class="block-heading" style="text-align: left">
+                        <p>Financial data processing not yet complete.  Please await notification in the Message Centre.</p>
+                    </div>
+                {% endif %}
+                {% if has_financial_data %}
+                    <div class="block-heading" style="text-align: left; margin-top: 2px;">
+                        <div style="padding-left: 20px; margin-bottom: 20px;">
+                            <form method="GET" action="" style="display: block;"> <!-- Changed to block display -->
+                                <div class="form-group"> <!-- Added a wrapper for each form group -->
+                                    <label for="year">Latest Financial Year for Display:</label>
+                                    <select id="year" name="year">
+                                        {% for year in unique_years %}
+                                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-group"> <!-- Added another wrapper for the second group -->
+                                    <label for="player">Company:</label>
+                                    <select id="player" name="player">
+                                        {% for player_id, player_name in player_options %}
+                                            <option value="{{ player_id }}" {% if player_id == selected_player %}selected{% endif %}>{{ player_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <input type="submit" value="Select">
+                            </form>
+                            <hr>
+                                <label>Summary of Key Information for Company {{ company_selected }}:</label>
+                            <hr>
+                            <div class="financial-data-table">
+                                {{ financial_data_table | safe }}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+
+
+{% endblock content %}

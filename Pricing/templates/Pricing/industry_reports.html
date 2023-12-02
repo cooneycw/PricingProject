@@ -39,7 +39,7 @@
                                 <input type="submit" value="Select">
                             </form>
                             <hr>
-                                <label>Summary of Key Information for Company {{ company_selected }}:</label>
+                                <label>Summary of Key Information for Company:   {{ company_selected }}</label>
                             <hr>
                             <div class="financial-data-table">
                                 {{ financial_data_table | safe }}
@@ -50,6 +50,29 @@
             </div>
         </section>
     </main>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Select all table rows within the financial-data-table
+        var tableRows = document.querySelectorAll('.financial-data-table tr');
 
+        // Loop through each table row
+        tableRows.forEach(function(row) {
+            // Select all th and td elements in the current row
+            var cells = row.querySelectorAll('th, td');
+
+            // Loop through each cell
+            cells.forEach(function(cell) {
+                // Check if the cell is empty
+                if(cell.innerHTML.trim() === '') {
+                    // If empty, insert a non-breaking space character
+                    cell.innerHTML = '&nbsp;';
+                }
+
+                // Apply the monospaced font to each cell
+                cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
+            });
+        });
+    });
+</script>
 
 {% endblock content %}

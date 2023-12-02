@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
-from django.db.models import Q, Count, Case, When, Value, CharField, Max
+from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
@@ -592,7 +592,7 @@ def financials_report(request, game_id):
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
         financial_data_list = list(
-            financial_data.values('year', 'written_premium', 'in_force', 'inv_income', 'annual_expenses',
+            financial_data.values('year', 'written_premium', 'inv_income', 'in_force',  'annual_expenses',
                                   'ay_losses', 'py_devl', 'profit', 'dividend_paid',
                                   'capital', 'capital_ratio', 'capital_test'))  # add more fields as necessary
 
@@ -676,6 +676,19 @@ def financials_report(request, game_id):
             blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            index = 4
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            index = 8
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            index = 11
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            index = 13
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
 
@@ -730,8 +743,10 @@ def industry_reports(request, game_id):
         player_list.append(player_name)
         player_id_list.append(count_id)
 
+    industry_id = len(player_list)
     player_list.append(f"{1 + len(player_list):02d} - Total Industry")
-    player_id_list.append(1+len(player_id_list))
+    player_id_list.append(len(player_id_list))
+    distinct_players.append('Total Industry')
 
     player_options = list(zip(player_id_list, player_list))
 
@@ -746,9 +761,24 @@ def industry_reports(request, game_id):
     selected_player = int(selected_player) if selected_player else default_player_id
 
     if unique_years:  # Proceed if there are any financial years available
-        company_data = Industry.objects.filter(game_id=game, player_name=distinct_players[selected_player])
-        company_data_list = list(
-            company_data.values('year', 'written_premium', 'annual_expenses',
+        if selected_player == industry_id:
+            # Create a DataFrame for the total view, excluding 'capital_test' and 'capital_ratio'
+            company_data = Industry.objects.filter(game_id=game).values('year').annotate(
+                written_premium=Sum('written_premium'),
+                annual_expenses=Sum('annual_expenses'),
+                cy_losses=Sum('cy_losses'),
+                profit=Sum('profit'),
+                capital=Sum('capital')
+            )
+            company_data_list = list(
+                company_data.values('year', 'written_premium', 'annual_expenses',
+                                'cy_losses', 'profit',
+                                'capital'))  # add more fields as necessary
+
+        else:
+            company_data = Industry.objects.filter(game_id=game, player_name=distinct_players[selected_player])
+            company_data_list = list(
+                company_data.values('year', 'written_premium', 'annual_expenses',
                                 'cy_losses', 'profit',
                                 'capital', 'capital_ratio', 'capital_test'))  # add more fields as necessary
 
@@ -772,15 +802,79 @@ def industry_reports(request, game_id):
 
             transposed_df = df_latest.set_index('Year').T  # Set 'year' as index before transposing
             # Now, we'll go through each row in the transposed DataFrame, rename it, and apply specific formatting
+            expense_ratio_data = {}
+            loss_ratio_data = {}
             for index, row in transposed_df.iterrows():
                 if index == 'written_premium':
                     # Rename and format the 'written_premium' row
                     new_row_name = 'Written Premium'
                     transposed_df.loc[index] = row.apply(
                         lambda x: f"${round(x):,}")  # formatting as currency without decimals
+                elif index == 'annual_expenses':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Annual Expenses'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'cy_losses':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Calendar Year Losses'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'profit':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Profit'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'capital':
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'Capital'
+                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
+                elif index == 'capital_ratio' and industry_id != selected_player:
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'MCT Ratio'
+                    transposed_df.loc[index] = row.apply(lambda x: f"{round(x * 100, 1)}%")  # formatting as an integer
+                elif index == 'capital_test' and industry_id != selected_player:
+                    # Rename and format the 'in_force' row
+                    new_row_name = 'MCT Test'
 
                 # Apply renaming to make the index/rows human-readable
                 transposed_df.rename(index={index: new_row_name}, inplace=True)
+
+            for year in transposed_df.columns:
+                # Convert the marketing expenses from string to float for calculation
+                wprem = float(transposed_df.at['Written Premium', year].replace('$', '').replace(',', ''))
+                annual_expenses = float(transposed_df.at['Annual Expenses', year].replace('$', '').replace(',', ''))
+                cy_losses = float(transposed_df.at['Calendar Year Losses', year].replace('$', '').replace(',', ''))
+                # canx = float(transposed_df.at['Cancellations', year].replace(',', ''))
+                #in_force = float(transposed_df.at['Beginning-In-Force', year].replace(',', ''))
+                # in_force_ind = float(transposed_df.at['Industry-In-Force', year].replace(',', ''))
+
+
+                # Calculate the percentage (ensuring not to divide by zero)
+                if wprem > 0:
+                    expense_ratio = (annual_expenses / wprem) * 100
+                else:
+                    expense_ratio = 0  # or None, or however you wish to represent this edge case
+
+                expense_ratio_data[year] = f"{expense_ratio:.1f}%"  # formatted to one decimal places
+
+                if wprem > 0:
+                    loss_ratio = (cy_losses / wprem) * 100
+                else:
+                    loss_ratio = 0  # or None, or however you wish to represent this edge case
+
+                loss_ratio_data[year] = f"{loss_ratio:.1f}%"  # formatted to one decimal places
+
+
+            expense_ratio_df = pd.DataFrame(expense_ratio_data, index=['Expense Ratio'])
+            loss_ratio_df = pd.DataFrame(loss_ratio_data, index=['Loss Ratio'])
+
+            insert_position_exp_ratio = transposed_df.index.get_loc('Annual Expenses') + 1
+            df_top_exp_ratio = transposed_df.iloc[:insert_position_exp_ratio]
+            df_bottom_exp_ratio = transposed_df.iloc[insert_position_exp_ratio:]
+            transposed_df_exp = pd.concat([df_top_exp_ratio, expense_ratio_df, df_bottom_exp_ratio])
+
+            insert_position_loss_ratio = transposed_df_exp.index.get_loc('Calendar Year Losses') + 1
+            df_top_loss_ratio = transposed_df_exp.iloc[:insert_position_loss_ratio]
+            df_bottom_loss_ratio = transposed_df_exp.iloc[insert_position_loss_ratio:]
+            transposed_df = pd.concat([df_top_loss_ratio, loss_ratio_df, df_bottom_loss_ratio])
 
             # Convert the final, formatted DataFrame to HTML for rendering
             if len(transposed_df.columns) < 4:
@@ -789,13 +883,23 @@ def industry_reports(request, game_id):
                 for i in range(missing_years):
                     transposed_df[f'{selected_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
 
-            index = 2
+            index = 1
             blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            index = 4
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            index = 7
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            if selected_player != industry_id:
+                index = 9
+                transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+                transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
-
         else:
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:

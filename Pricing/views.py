@@ -542,18 +542,43 @@ def mktgsales_report(request, game_id):
             transposed_df_retention = pd.concat([df_top_retention, retention_ratio_df, df_bottom_retention])
 
             insert_position_mktshare = transposed_df_retention.index.get_loc('Industry-In-Force') + 1
-            df_top_mktshare = transposed_df_close.iloc[:insert_position_mktshare]
+            df_top_mktshare = transposed_df_retention.iloc[:insert_position_mktshare]
             df_bottom_mktshare = transposed_df_close.iloc[insert_position_mktshare:]
-            transposed_df_new = pd.concat([df_top_mktshare, mkt_share_ratio_df, df_bottom_mktshare])
+            transposed_df = pd.concat([df_top_mktshare, mkt_share_ratio_df, df_bottom_mktshare])
 
             # Convert the final, formatted DataFrame to HTML for rendering
-            if len(transposed_df_new.columns) < 4:
+            if len(transposed_df.columns) < 4:
                 # If there are fewer than four years of data, we'll simulate the rest as empty columns
-                missing_years = 4 - len(transposed_df_new.columns)
+                missing_years = 4 - len(transposed_df.columns)
                 for i in range(missing_years):
-                    transposed_df_new[f'{selected_year - i - 1} '] = ['' for _ in range(len(transposed_df_new.index))]
+                    transposed_df[f'{selected_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
 
-            financial_data_table = transposed_df_new.to_html(classes='my-financial-table', border=0, justify='initial',
+            index = 1
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
+            index = 5
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
+            index = 7
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
+            index = 11
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
+            index = 14
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
+            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
 
         else:

@@ -80,6 +80,37 @@ class Industry(models.Model):
     capital_test = models.CharField(max_length=4, null=True, blank=True)
 
 
+class Valuation(models.Model):
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
+    year = models.IntegerField()
+    beg_in_force = models.DecimalField(max_digits=16, decimal_places=0)
+    in_force = models.DecimalField(max_digits=16, decimal_places=0)
+    start_capital = models.DecimalField(max_digits=18, decimal_places=2)
+    excess_capital = models.DecimalField(max_digits=18, decimal_places=2)
+    capital = models.DecimalField(max_digits=18, decimal_places=2)
+    dividend_paid = models.DecimalField(max_digits=18, decimal_places=2)
+    profit = models.DecimalField(max_digits=18, decimal_places=2)
+    pv_index = models.DecimalField(max_digits=18, decimal_places=6)
+    inv_rate = models.DecimalField(max_digits=18, decimal_places=6)
+    irr_rate = models.DecimalField(max_digits=18, decimal_places=6)
+
+
+class Indications(models.Model):
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
+    year = models.IntegerField()
+
+
+class Decisions(models.Model):
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
+    year = models.IntegerField()
+
+
 class ChatMessage(models.Model):
     sequence_number = models.AutoField(primary_key=True)
     timestamp = models.DateTimeField(auto_now_add=True)

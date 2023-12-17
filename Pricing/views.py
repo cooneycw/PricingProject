@@ -1,6 +1,8 @@
 import uuid
+import copy
 import pytz
 import pandas as pd
+from .utils import reverse_pv_index
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
@@ -12,7 +14,7 @@ from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
-from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, ChatMessage
+from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Indications, Decisions, ChatMessage
 
 
 # Create your views here.
@@ -919,6 +921,161 @@ def industry_reports(request, game_id):
     }
     return render(request, template_name, context)
 
+
+@login_required()
+def valuation_report(request, game_id):
+    user = request.user
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+
+    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    selected_year = request.GET.get('year')  # Get the selected year from the query parameters
+    selected_year = int(selected_year) if selected_year else None
+
+    curr_pos = request.session.get('curr_pos', 0)
+    template_name = 'Pricing/valuation_report.html'
+
+    valuation_data = Valuation.objects.filter(game_id=game)
+    unique_years = valuation_data.order_by('-year').values_list('year', flat=True).distinct()
+    if unique_years:  # Proceed if there are any financial years available
+        valuation_data_list = list(valuation_data.values('id', 'player_name', 'year', 'in_force', 'beg_in_force',
+                                                         'dividend_paid', 'pv_index', 'inv_rate', 'irr_rate'))
+        val_df = pd.DataFrame(valuation_data_list)
+
+    # Creating a DataFrame from the obtained data
+        if not val_df.empty:
+            if selected_year not in unique_years:
+                selected_year = unique_years[0]
+            val_df = val_df[val_df['year'] <= selected_year]
+            val_df = val_df.sort_values(by=['player_name', 'year'])
+            all_data_years = val_df['year'].unique()  # Get all unique years
+            latest_year = all_data_years.max()
+            earliest_year = all_data_years.min()
+            valuation_period = f'Valuation Report built using: {earliest_year} - {latest_year}'
+
+            ordered_data = valuation_data.order_by('id', 'player_name')
+
+            # Keep track of the players you've already seen
+            seen_players = set()
+            distinct_players = []
+
+            # Iterate over the ordered queryset
+            for entry in ordered_data:
+                player_name = entry.player_name
+                if player_name not in seen_players:
+                    distinct_players.append(player_name)
+                    seen_players.add(player_name)
+
+            default_player_id = None
+            player_id_list = []
+            player_list = []
+            for count_id, unique_player in enumerate(distinct_players):
+                # player_name = f"{1 + count_id:02d} - {unique_player}"
+                player_name = f"{unique_player}"
+                if unique_player == request.user.username:
+                    default_player_id = count_id
+                player_list.append(player_name)
+                player_id_list.append(count_id)
+
+            max_pos = max(len(player_id_list) - 4, 0)
+
+            # Update curr_pos based on Next and Last buttons
+            if request.POST.get('Next') == 'Next':
+                curr_pos = min(curr_pos + 1, max_pos)
+            if request.POST.get('Last') == 'Last':
+                curr_pos = max(curr_pos - 1, 0)
+
+            # Save the updated curr_pos in the session
+            request.session['curr_pos'] = curr_pos
+
+            # Find the position of default_player_id
+            default_pos = player_id_list.index(default_player_id)
+
+            # Calculate the starting position for displayed_players
+            # It should always start with default_player_id and show next 3 players in the list
+            start_pos = max(default_pos + curr_pos, 0)
+            end_pos = min(start_pos + 4, len(player_id_list))
+
+            # Build the displayed players list starting with default_player_id
+            displayed_players = [default_player_id] + player_id_list[start_pos + 1:end_pos]
+
+            # If the list is shorter than 4, pad it with the next available players
+            while len(displayed_players) < 4 and end_pos < len(player_id_list):
+                displayed_players.append(player_id_list[end_pos])
+                end_pos += 1
+
+            # Prepare the data for displayed companies (assuming player_list is a dictionary or list)
+            companies = [player_list[player_id] for player_id in displayed_players]
+
+            # print(f'companies: {companies} max_pos: {max_pos} curr_pos: {curr_pos}  default_pos: {default_pos}  start_pos: {start_pos}  displayed: {displayed_players}')
+            val_df = val_df.groupby('player_name').apply(reverse_pv_index).reset_index(drop=True)
+            val_df['dividend_pv'] = val_df['new_pv_index'] * val_df['dividend_paid']
+            df = val_df.groupby('player_name')['dividend_pv'].sum().reset_index()
+
+            # Rename the 'player_name' column to 'Company'
+            df = df.rename(columns={'player_name': 'Company'})
+            df['Valuation Rank'] = df['dividend_pv'].rank(ascending=False, method='min').astype(int)
+
+            filtered_df = df[df['Company'].isin(companies)]
+            filtered_df = filtered_df.set_index('Company').loc[companies].reset_index()
+            transposed_df = filtered_df.T
+            transposed_df = transposed_df.rename(columns=transposed_df.iloc[0]).drop(transposed_df.index[0])
+            for index, row in transposed_df.iterrows():
+                if index == 'dividend_pv':
+                    # Rename and format the 'written_premium' row
+                    new_row_name = 'P.V. Dividends ($MM)'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"${round(x/1000000):.1f}")  # formatting as currency without decimals
+                elif index == 'Valuation Rank':
+                    new_row_name = 'Valuation Rank'
+                transposed_df.rename(index={index: new_row_name}, inplace=True)
+            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                         index=True)
+        else:
+            financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
+    else:
+        financial_data_table = '<p>No financial data available.</p>'
+
+    context = {
+        'title': ' - Valuation Report',
+        'game': game,
+        'financial_data_table': financial_data_table,
+        'has_financial_data': valuation_data.exists(),
+        'unique_years': unique_years[0:len(unique_years)-2],
+        'latest_year': latest_year,
+        'selected_year': selected_year,
+        'valuation_period': valuation_period,
+    }
+    return render(request, template_name, context)
+
+
+@login_required()
+def decision_input(request, game_id):
+    user = request.user
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+
+    template_name = 'Pricing/decision_input.html'
+    indication_data = Indications.objects.filter(game_id=game)
+    unique_players = indication_data.order_by('player_id').values_list('player_name', flat=True).distinct()
+
+    selected_player = None
+    financial_data_table = None
+
+    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    context = {
+        'title': ' - Decision Input',
+        'game': game,
+        'financial_data_table': financial_data_table,
+        'has_financial_data': valuation_data.exists(),
+        'unique_players': unique_players,
+        'selected_player': selected_player,
+    }
+    return render(request, template_name, context)
 
 
 @login_required

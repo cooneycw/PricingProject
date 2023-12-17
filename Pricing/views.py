@@ -1,8 +1,9 @@
 import uuid
 import copy
 import pytz
+import numpy as np
 import pandas as pd
-from .utils import reverse_pv_index
+from .utils import reverse_pv_index, calculate_growth_rate, calculate_avg_profit, calculate_future_value
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
@@ -15,7 +16,7 @@ from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
 from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Indications, Decisions, ChatMessage
-
+pd.set_option('display.max_columns', None)  # None means show all columns
 
 # Create your views here.
 def home(request):
@@ -931,7 +932,7 @@ def valuation_report(request, game_id):
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
-    selected_year = request.GET.get('year')  # Get the selected year from the query parameters
+    selected_year = request.POST.get('year')  # Get the selected year from the query parameters
     selected_year = int(selected_year) if selected_year else None
 
     curr_pos = request.session.get('curr_pos', 0)
@@ -941,9 +942,11 @@ def valuation_report(request, game_id):
     unique_years = valuation_data.order_by('-year').values_list('year', flat=True).distinct()
     if unique_years:  # Proceed if there are any financial years available
         valuation_data_list = list(valuation_data.values('id', 'player_name', 'year', 'in_force', 'beg_in_force',
-                                                         'dividend_paid', 'pv_index', 'inv_rate', 'irr_rate'))
+                                                         'profit',
+                                                         'dividend_paid', 'excess_capital',
+                                                         'pv_index', 'inv_rate', 'irr_rate'))
         val_df = pd.DataFrame(valuation_data_list)
-
+        irr_rate_scalar = val_df['irr_rate'].iloc[0]
     # Creating a DataFrame from the obtained data
         if not val_df.empty:
             if selected_year not in unique_years:
@@ -952,8 +955,8 @@ def valuation_report(request, game_id):
             val_df = val_df.sort_values(by=['player_name', 'year'])
             all_data_years = val_df['year'].unique()  # Get all unique years
             latest_year = all_data_years.max()
-            earliest_year = all_data_years.min()
-            valuation_period = f'Valuation Report built using: {earliest_year} - {latest_year}'
+            earliest_year = max((latest_year - 10), all_data_years.min())
+            valuation_period = f'Valuation Report utilizing: {earliest_year} - {latest_year} '
 
             ordered_data = valuation_data.order_by('id', 'player_name')
 
@@ -1012,25 +1015,104 @@ def valuation_report(request, game_id):
             # print(f'companies: {companies} max_pos: {max_pos} curr_pos: {curr_pos}  default_pos: {default_pos}  start_pos: {start_pos}  displayed: {displayed_players}')
             val_df = val_df.groupby('player_name').apply(reverse_pv_index).reset_index(drop=True)
             val_df['dividend_pv'] = val_df['new_pv_index'] * val_df['dividend_paid']
-            df = val_df.groupby('player_name')['dividend_pv'].sum().reset_index()
-
+            val_df['excess_capital'] = np.where(val_df['year'] == selected_year, val_df['excess_capital'], 0)
+            val_df['in_force'] = np.where(val_df['year'] == selected_year, val_df['in_force'], 0)
+            val_df['tot_in_force'] = val_df['beg_in_force']
+            val_df['beg_in_force'] = np.where(val_df['year'] == earliest_year, val_df['beg_in_force'], 0)
+            val_df['future_value'] = 0
+            val_df['total_valuation'] = val_df['dividend_pv'] + val_df['excess_capital']
+            # df = val_df.groupby('player_name')['dividend_pv'].sum().reset_index()
+            df = val_df.groupby('player_name').agg({'in_force': 'sum',
+                                                    'beg_in_force': 'sum',
+                                                    'tot_in_force': 'sum',
+                                                    'profit': 'sum',
+                                                    'future_value': 'sum',
+                                                    'dividend_pv': 'sum', 'excess_capital': 'sum',
+                                                    'future_value': 'sum',
+                                                    'total_valuation': 'sum'}).reset_index()
+            df['capped_growth_rate'] = df.apply(lambda row: calculate_growth_rate(row, latest_year, earliest_year ), axis=1)
+            df['avg_profit'] = df.apply(lambda row: calculate_avg_profit(row, latest_year, earliest_year),  axis=1)
+            df['future_value'] = df.apply(lambda row: calculate_future_value(row, latest_year, earliest_year, irr_rate_scalar), axis=1)
+            df['total_valuation'] = df['total_valuation'] + df['future_value']
             # Rename the 'player_name' column to 'Company'
             df = df.rename(columns={'player_name': 'Company'})
-            df['Valuation Rank'] = df['dividend_pv'].rank(ascending=False, method='min').astype(int)
+            df['Valuation Rank'] = df['total_valuation'].rank(ascending=False, method='min').astype(int)
 
             filtered_df = df[df['Company'].isin(companies)]
+            filtered_df = filtered_df.drop(['tot_in_force', 'beg_in_force', 'profit'], axis=1)  # Drop unwanted columns
             filtered_df = filtered_df.set_index('Company').loc[companies].reset_index()
+
             transposed_df = filtered_df.T
             transposed_df = transposed_df.rename(columns=transposed_df.iloc[0]).drop(transposed_df.index[0])
+
             for index, row in transposed_df.iterrows():
-                if index == 'dividend_pv':
+                if index == 'in_force':
                     # Rename and format the 'written_premium' row
-                    new_row_name = 'P.V. Dividends ($MM)'
+                    new_row_name = 'In-Force'
                     transposed_df.loc[index] = row.apply(
-                        lambda x: f"${round(x/1000000):.1f}")  # formatting as currency without decimals
+                        lambda x: f"{x:,}")  # formatting as currency without decimals
+                elif index == 'capped_growth_rate':
+                    # Rename and format the 'written_premium' row
+                    new_row_name = 'Capped Growth Rate'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"{100 * x:.1f}%")  # formatting as currency without decimals
+                elif index == 'avg_profit':
+                    # Rename and format the 'written_premium' row
+                    new_row_name = 'Avg Profit / Client'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"${round(x):,}")  # formatting as currency without decimals
+                elif index == 'future_value':
+                    # Rename and format the 'written_premium' row
+                    new_row_name = 'Future Proj Value (MM)'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"${.1 * round(x/100000):.1f}")  # formatting as currency without decimals
+                elif index == 'dividend_pv':
+                    # Rename and format the 'written_premium' row
+                    new_row_name = 'P.V. Dividends (MM)'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"${.1 * round(x/100000):.1f}")  # formatting as currency without decimals
+                elif index == 'excess_capital':
+                    new_row_name = f'Excess Capital (MM)'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"${.1 * round(x/100000):.1f}")  # formatting as currency without decimals
+                elif index == 'total_valuation':
+                    new_row_name = 'Total Valuation (MM)'
+                    transposed_df.loc[index] = row.apply(
+                        lambda x: f"${.1 * round(x/100000):.1f}")  # formatting as currency without decimals
                 elif index == 'Valuation Rank':
                     new_row_name = 'Valuation Rank'
+
                 transposed_df.rename(index={index: new_row_name}, inplace=True)
+            row_order = {
+                'In-Force': 0,
+                'Capped Growth Rate': 1,
+                'Avg Profit / Client': 2,
+                'Future Proj Value (MM)': 3,
+                'P.V. Dividends (MM)': 4,
+                'Excess Capital (MM)': 5,
+                'Total Valuation (MM)': 6,
+                'Valuation Rank': 7,
+            }
+            transposed_df['RowOrder'] = transposed_df.index.map(row_order)
+            transposed_df.sort_values(by='RowOrder', inplace=True)
+            transposed_df.drop(columns=['RowOrder'], inplace=True)
+
+            index = 3
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
+            index = 7
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
+            index = 9
+            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+
+
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
         else:
@@ -1038,12 +1120,15 @@ def valuation_report(request, game_id):
     else:
         financial_data_table = '<p>No financial data available.</p>'
 
+    if len(unique_years) > 2:
+        unique_years = unique_years[0:len(unique_years)-2]
+
     context = {
         'title': ' - Valuation Report',
         'game': game,
         'financial_data_table': financial_data_table,
         'has_financial_data': valuation_data.exists(),
-        'unique_years': unique_years[0:len(unique_years)-2],
+        'unique_years': unique_years,
         'latest_year': latest_year,
         'selected_year': selected_year,
         'valuation_period': valuation_period,

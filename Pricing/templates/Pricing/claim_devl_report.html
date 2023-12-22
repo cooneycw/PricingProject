@@ -1,0 +1,71 @@
+{% extends "Pricing/base_enh.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% block content %}
+    <main class="page landing-page">
+        <section class="clean-block clean-info dark">
+            <div class="container">
+                <div class="block-heading" style="text-align:center; margin-bottom: 0;">
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
+                    </form>
+                </div>
+                {% if not has_financial_data %}
+                    <div class="block-heading" style="text-align: left">
+                        <p>Claim development data processing not yet complete.  Please await notification in the Message Centre.</p>
+                    </div>
+                {% endif %}
+                {% if has_financial_data %}
+                    <div class="block-heading" style="text-align: left; margin-top: 2px; "> <!-- Added some top margin -->
+                        <div style="padding-left: 20px;  margin-bottom: 20px;">
+                            <h5>{{ valuation_period }}</h5>
+                            <form method="POST" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
+                                {% csrf_token %}
+                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
+                                    <select id="year" name="year">
+                                        {% for year in unique_years %}
+                                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <input type="submit" value="Select" style="margin-right: 40px;">
+                                <input type="submit" name="Last" value="Last" style="margin-right: 10px;">
+                                <input type="submit" name="Next" value="Next">
+                            </form>
+                            <hr>
+                            <div class="financial-data-table">
+                                {{ financial_data_table|safe }}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+ <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Select all table rows within the financial-data-table
+        var tableRows = document.querySelectorAll('.financial-data-table tr');
+
+        // Loop through each table row
+        tableRows.forEach(function(row) {
+            // Select all th and td elements in the current row
+            var cells = row.querySelectorAll('th, td');
+
+            // Loop through each cell
+            cells.forEach(function(cell) {
+                // Check if the cell is empty
+                if(cell.innerHTML.trim() === '') {
+                    // If empty, insert a non-breaking space character
+                    cell.innerHTML = '&nbsp;';
+                }
+
+                // Apply the monospaced font to each cell
+                cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
+            });
+        });
+    });
+</script>
+
+{% endblock content %}

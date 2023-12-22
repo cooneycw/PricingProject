@@ -97,6 +97,14 @@ class Valuation(models.Model):
     irr_rate = models.DecimalField(max_digits=18, decimal_places=6)
 
 
+class Triangles(models.Model):
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
+    year = models.IntegerField()
+    triangles = models.JSONField()
+
+
 class Indications(models.Model):
     game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
     player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)

@@ -559,22 +559,18 @@ def mktgsales_report(request, game_id):
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
 
             index = 5
-            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
 
             index = 7
-            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
 
             index = 11
-            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
 
             index = 14
-            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
 
@@ -1157,6 +1153,62 @@ def valuation_report(request, game_id):
         'latest_year': latest_year,
         'selected_year': selected_year,
         'valuation_period': valuation_period,
+    }
+    return render(request, template_name, context)
+
+
+@login_required()
+def claim_devl_report(request, game_id):
+    user = request.user
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+
+    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    selected_year = request.POST.get('year')  # Get the selected year from the query parameters
+    selected_year = int(selected_year) if selected_year else None
+
+    curr_pos = request.session.get('curr_pos', 0)
+    template_name = 'Pricing/claim_devl_report.html'
+
+    context = {
+        'title': ' - Claim Development Report',
+        'game': game,
+        # 'financial_data_table': financial_data_table,
+        # 'has_financial_data': valuation_data.exists(),
+        # 'unique_years': unique_years,
+        # 'latest_year': latest_year,
+        # 'selected_year': selected_year,
+        # 'valuation_period': valuation_period,
+    }
+    return render(request, template_name, context)
+
+
+@login_required()
+def claim_trend_report(request, game_id):
+    user = request.user
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+
+    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    selected_year = request.POST.get('year')  # Get the selected year from the query parameters
+    selected_year = int(selected_year) if selected_year else None
+
+    curr_pos = request.session.get('curr_pos', 0)
+    template_name = 'Pricing/claim_trend_report.html'
+
+    context = {
+        'title': ' - Claim Development Report',
+        'game': game,
+        # 'financial_data_table': financial_data_table,
+        # 'has_financial_data': valuation_data.exists(),
+        # 'unique_years': unique_years,
+        # 'latest_year': latest_year,
+        # 'selected_year': selected_year,
+        # 'valuation_period': valuation_period,
     }
     return render(request, template_name, context)
 

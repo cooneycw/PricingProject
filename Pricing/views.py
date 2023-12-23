@@ -15,7 +15,7 @@ from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
-from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Indications, Decisions, ChatMessage
+from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Triangles, Indications, Decisions, ChatMessage
 pd.set_option('display.max_columns', None)  # None means show all columns
 
 # Create your views here.
@@ -1169,19 +1169,59 @@ def claim_devl_report(request, game_id):
     selected_year = request.POST.get('year')  # Get the selected year from the query parameters
     selected_year = int(selected_year) if selected_year else None
 
-    curr_pos = request.session.get('curr_pos', 0)
+    default_coverage_id = 2
+    coverage_id_list = []
+    coverage_list = []
+    coverages = ['Bodily Injury', 'Collision', 'Total']
+    for count_id, coverage in enumerate(coverages):
+        coverage_list.append(coverage)
+        coverage_id_list.append(count_id)
+    coverage_options = list(zip(coverage_id_list, coverage_list))
+
+    selected_coverage = request.GET.get('coverage')
+    selected_coverage = int(selected_coverage) if selected_coverage else default_coverage_id
+
     template_name = 'Pricing/claim_devl_report.html'
+
+    triangle_data = Triangles.objects.filter(game_id=game, player_id=user)
+    unique_years = triangle_data.order_by('-year').values_list('year', flat=True).distinct()
+    if unique_years:  # Proceed if there are any financial years available
+        triangle_data_list = list(triangle_data.values('id', 'player_name', 'year', 'triangles'))
+        triangle_df = pd.DataFrame(triangle_data_list)
+
+    # Creating a DataFrame from the obtained data
+        if not triangle_df.empty:
+            all_data_years = triangle_df['year'].unique()  # Get all unique years
+            latest_year = all_data_years.max()
+            if selected_year not in unique_years:
+                selected_year = unique_years[0]
+            triangle_df = triangle_df[triangle_df['year'] == selected_year]
+
+            claim_data = triangle_df.triangles[0]['triangles']
+            acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
+            devl_mths = [(yr + 1)*12 for yr in claim_data['devl_yrs']]
+            covg = ['paid_bi', 'paid_cl', 'paid_to'][selected_coverage]
+            df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
+            for i, devl_mth in enumerate(devl_mths):
+                df.loc[devl_mth] = claim_data[covg][i]
+
+            transposed_df = df.T
+            transposed_df = transposed_df.applymap(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
+            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                 index=True)
 
     context = {
         'title': ' - Claim Development Report',
         'game': game,
-        # 'financial_data_table': financial_data_table,
-        # 'has_financial_data': valuation_data.exists(),
-        # 'unique_years': unique_years,
-        # 'latest_year': latest_year,
-        # 'selected_year': selected_year,
-        # 'valuation_period': valuation_period,
+        'financial_data_table': financial_data_table,
+        'has_financial_data': triangle_data.exists(),
+        'unique_years': unique_years,
+        'latest_year': latest_year,
+        'selected_year': selected_year,
+        'coverage_options': coverage_options,
+        'selected_coverage': selected_coverage,
     }
+
     return render(request, template_name, context)
 
 

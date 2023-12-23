@@ -19,24 +19,36 @@
                 {% if has_financial_data %}
                     <div class="block-heading" style="text-align: left; margin-top: 2px; "> <!-- Added some top margin -->
                         <div style="padding-left: 20px;  margin-bottom: 20px;">
-                            <h5>{{ valuation_period }}</h5>
-                            <form method="POST" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
-                                {% csrf_token %}
-                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
-                                    <select id="year" name="year">
-                                        {% for year in unique_years %}
-                                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <input type="submit" value="Select" style="margin-right: 40px;">
-                                <input type="submit" name="Last" value="Last" style="margin-right: 10px;">
-                                <input type="submit" name="Next" value="Next">
-                            </form>
-                            <hr>
-                            <div class="financial-data-table">
-                                {{ financial_data_table|safe }}
-                            </div>
+                            <form method="GET" action="">
+                              {% csrf_token %}
+                              <div class="form-group" style="margin-bottom: 10px;margin-right: 14px">
+                                  <label for="year" style="margin-right: 14px">Report Year:</label>
+                                  <select id="year" name="year">
+                                      {% for year in unique_years %}
+                                          <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                      {% endfor %}
+                                  </select>
+                              </div>
+                              <div class="form-group" style="margin-bottom: 10px">
+                                  <label for="coverage" style="margin-right: 33px">Coverage:</label>
+                                  <select id="coverage" name="coverage">
+                                      {% for coverage_id, coverage_name in coverage_options %}
+                                          <option value="{{ coverage_id }}" {% if coverage_id == selected_coverage %}selected{% endif %}>{{ coverage_name }}</option>
+                                      {% endfor %}
+                                  </select>
+                              </div>
+                              <input type="submit" value="Select" style="margin-right: 40px;">
+                          </form>
+                          <hr>
+                            <h6>Paid Loss Development Triangle:</h6>
+                          <div class="financial-data-table">
+                              {{ financial_data_table|safe }}
+                          </div>
+                          <hr>
+                            <h6>Age-to-Age / Age-to-Ultimate Factors:</h6>
+                          <div class="financial-data-table">
+                              {{ financial_data_table|safe }}
+                          </div>
                         </div>
                     </div>
                 {% endif %}

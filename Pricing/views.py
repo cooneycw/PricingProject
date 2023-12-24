@@ -1201,19 +1201,70 @@ def claim_devl_report(request, game_id):
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
             devl_mths = [(yr + 1)*12 for yr in claim_data['devl_yrs']]
             covg = ['paid_bi', 'paid_cl', 'paid_to'][selected_coverage]
+            incd_covg = ['incd_bi', 'incd_cl', 'incd_to'][selected_coverage]
+
             df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
+            incd_df = copy.deepcopy(df)
+
             for i, devl_mth in enumerate(devl_mths):
                 df.loc[devl_mth] = claim_data[covg][i]
+                incd_df.loc[devl_mth] = claim_data[incd_covg][i]
 
             transposed_df = df.T
-            transposed_df = transposed_df.applymap(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
-            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
-                                                 index=True)
+            transposed_incd_df = incd_df.T
+
+            fact_labels = ['Age-to-Age']
+            fact_devl_mths = copy.deepcopy(devl_mths)
+            fact_devl_mths[0] = None
+            fact_df = pd.DataFrame(columns=fact_labels, index=fact_devl_mths)
+
+            for i, fact_devl_mth in enumerate(fact_devl_mths):
+                if fact_devl_mth == fact_devl_mths[0]:
+                    fact_df.iloc[0, 0] = 0
+                if fact_devl_mth == fact_devl_mths[1]:
+                    numerator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 1])
+                    denominator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 0])
+                    if denominator == 0:
+                        denominator = 1
+                    fact_df.iloc[1, 0] = numerator / denominator
+                if fact_devl_mth == fact_devl_mths[2]:
+                    numerator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 2])
+                    denominator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 1])
+                    if denominator == 0:
+                        denominator = 1
+                    fact_df.iloc[2, 0] = numerator / denominator
+
+            fact_transposed_df = fact_df.T
+            fact_transposed_df.columns = [str(int(col)) if pd.notna(col) else '' for col in fact_transposed_df.columns]
+            fact_transposed_df_fmt = fact_transposed_df.map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
+            fact_transposed_df_fmt.iloc[0, 1] = '<span class="red-text">' + fact_transposed_df_fmt.iloc[0, 1] + '</span>'
+            fact_transposed_df_fmt.iloc[0, 2] = '<span class="red-text">' + fact_transposed_df_fmt.iloc[0, 2] + '</span>'
+            # project to ultimate
+            transposed_df.iloc[3, 2] = transposed_df.iloc[3, 1] * fact_df.iloc[2, 0]
+            transposed_df.iloc[4, 1] = transposed_df.iloc[4, 0] * fact_df.iloc[1, 0]
+            transposed_df.iloc[4, 2] = transposed_df.iloc[4, 1] * fact_df.iloc[2, 0]
+            transposed_df_fmt = transposed_df.map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
+            transposed_incd_df_fmt = transposed_incd_df.map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
+
+            transposed_df_fmt.iloc[3, 2] = '<span class="red-text">' + transposed_df_fmt.iloc[3, 2] + '</span>'
+            transposed_df_fmt.iloc[4, 1] = '<span class="red-text">' + transposed_df_fmt.iloc[4, 1] + '</span>'
+            transposed_df_fmt.iloc[4, 2] = '<span class="red-text">' + transposed_df_fmt.iloc[4, 2] + '</span>'
+
+            paid_data_table = transposed_df_fmt.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                 index=True, escape=False)
+
+            incd_data_table = transposed_incd_df_fmt.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                        index=True, escape=False)
+
+            factor_data_table = fact_transposed_df_fmt.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                    index=True, escape=False)
 
     context = {
         'title': ' - Claim Development Report',
         'game': game,
-        'financial_data_table': financial_data_table,
+        'paid_data_table': paid_data_table,
+        'incurred_data_table': incd_data_table,
+        'factor_data_table': factor_data_table,
         'has_financial_data': triangle_data.exists(),
         'unique_years': unique_years,
         'latest_year': latest_year,

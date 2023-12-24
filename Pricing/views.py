@@ -1212,6 +1212,12 @@ def claim_devl_report(request, game_id):
 
             transposed_df = df.T
             transposed_incd_df = incd_df.T
+            transposed_booked_error_df = copy.deepcopy(incd_df.T).iloc[0:3, :]
+            transposed_booked_error_df.iloc[0:3, 0] = transposed_booked_error_df.iloc[0:3, 0] / transposed_booked_error_df.iloc[0:3, 2] - 1
+            transposed_booked_error_df.iloc[0:3, 1] = transposed_booked_error_df.iloc[0:3, 1] / transposed_booked_error_df.iloc[0:3, 2] - 1
+            transposed_booked_error_df.iloc[0:3, 2] = -99999999
+            transposed_booked_error_df.columns = [str(int(col)) if col < 36 else '' for col in transposed_booked_error_df.columns]
+            transposed_booked_error_df_fmt = transposed_booked_error_df.map(lambda x: '' if x == -99999999 else '{:,.1f}%'.format(100*x))
 
             fact_labels = ['Age-to-Age']
             fact_devl_mths = copy.deepcopy(devl_mths)
@@ -1259,12 +1265,16 @@ def claim_devl_report(request, game_id):
             factor_data_table = fact_transposed_df_fmt.to_html(classes='my-financial-table', border=0, justify='initial',
                                                     index=True, escape=False)
 
+            booked_error_data_table = transposed_booked_error_df_fmt.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                    index=True, escape=False)
+
     context = {
         'title': ' - Claim Development Report',
         'game': game,
         'paid_data_table': paid_data_table,
         'incurred_data_table': incd_data_table,
         'factor_data_table': factor_data_table,
+        'booked_error_data_table': booked_error_data_table,
         'has_financial_data': triangle_data.exists(),
         'unique_years': unique_years,
         'latest_year': latest_year,
@@ -1288,19 +1298,91 @@ def claim_trend_report(request, game_id):
     selected_year = request.POST.get('year')  # Get the selected year from the query parameters
     selected_year = int(selected_year) if selected_year else None
 
-    curr_pos = request.session.get('curr_pos', 0)
+    default_coverage_id = 2
+    coverage_id_list = []
+    coverage_list = []
+    coverages = ['Bodily Injury', 'Collision', 'Total']
+    for count_id, coverage in enumerate(coverages):
+        coverage_list.append(coverage)
+        coverage_id_list.append(count_id)
+    coverage_options = list(zip(coverage_id_list, coverage_list))
+
+    selected_coverage = request.GET.get('coverage')
+    selected_coverage = int(selected_coverage) if selected_coverage else default_coverage_id
+
     template_name = 'Pricing/claim_trend_report.html'
+
+    triangle_data = Triangles.objects.filter(game_id=game, player_id=user)
+    financial_data = Financials.objects.filter(game_id=game, player_id=user)
+
+    unique_years = triangle_data.order_by('-year').values_list('year', flat=True).distinct()
+    if unique_years:  # Proceed if there are any financial years available
+        financial_data_list = list(financial_data.values('year', 'in_force', 'clm_bi', 'clm_cl'))
+        financial_df = pd.DataFrame(financial_data_list)
+        triangle_data_list = list(triangle_data.values('id', 'player_name', 'year', 'triangles'))
+        triangle_df = pd.DataFrame(triangle_data_list)
+
+    # Creating a DataFrame from the obtained data
+        if not triangle_df.empty:
+            all_data_years = triangle_df['year'].unique()  # Get all unique years
+            latest_year = all_data_years.max()
+            if selected_year not in unique_years:
+                selected_year = unique_years[0]
+            triangle_df = triangle_df[triangle_df['year'] == selected_year]
+            financial_df = financial_df[financial_df['year'] >= (selected_year - 5)]
+
+            claim_data = triangle_df.triangles[0]['triangles']
+            acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
+            devl_mths = [(yr + 1)*12 for yr in claim_data['devl_yrs']]
+            covg = ['paid_bi', 'paid_cl', 'paid_to'][selected_coverage]
+            incd_covg = ['incd_bi', 'incd_cl', 'incd_to'][selected_coverage]
+
+            df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
+            for i, devl_mth in enumerate(devl_mths):
+                df.loc[devl_mth] = claim_data[covg][i]
+
+            transposed_df = df.T
+
+            fact_labels = ['Age-to-Age']
+            fact_devl_mths = copy.deepcopy(devl_mths)
+            fact_devl_mths[0] = None
+            fact_df = pd.DataFrame(columns=fact_labels, index=fact_devl_mths)
+
+            for i, fact_devl_mth in enumerate(fact_devl_mths):
+                if fact_devl_mth == fact_devl_mths[0]:
+                    fact_df.iloc[0, 0] = 0
+                if fact_devl_mth == fact_devl_mths[1]:
+                    numerator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 1])
+                    denominator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 0])
+                    if denominator == 0:
+                        denominator = 1
+                    fact_df.iloc[1, 0] = numerator / denominator
+                if fact_devl_mth == fact_devl_mths[2]:
+                    numerator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 2])
+                    denominator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 1])
+                    if denominator == 0:
+                        denominator = 1
+                    fact_df.iloc[2, 0] = numerator / denominator
+
+            cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost', 'Claim Count', 'Frequency', 'Severity']
+            display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
+            display_yrs.reverse()
+            display_df = pd.DataFrame(columns=display_yrs, index=cols)
+            i = 0
+            for categ, row in display_df.iterrows():
+                cwc = 0
 
     context = {
         'title': ' - Claim Development Report',
         'game': game,
-        # 'financial_data_table': financial_data_table,
-        # 'has_financial_data': valuation_data.exists(),
-        # 'unique_years': unique_years,
-        # 'latest_year': latest_year,
-        # 'selected_year': selected_year,
-        # 'valuation_period': valuation_period,
-    }
+        'trend_data_table': None,
+        'has_financial_data': triangle_data.exists(),
+        'unique_years': unique_years,
+        'latest_year': latest_year,
+        'selected_year': selected_year,
+        'coverage_options': coverage_options,
+        'selected_coverage': selected_coverage,
+        }
     return render(request, template_name, context)
 
 

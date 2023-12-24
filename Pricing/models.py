@@ -59,6 +59,8 @@ class Financials(models.Model):
     annual_expenses = models.DecimalField(max_digits=18, decimal_places=2)
     ay_losses = models.DecimalField(max_digits=18, decimal_places=2)
     py_devl = models.DecimalField(max_digits=18, decimal_places=2)
+    clm_bi = models.DecimalField(max_digits=16, decimal_places=0)
+    clm_cl = models.DecimalField(max_digits=16, decimal_places=0)
     profit = models.DecimalField(max_digits=18, decimal_places=2)
     dividend_paid = models.DecimalField(max_digits=18, decimal_places=2)
     capital = models.DecimalField(max_digits=18, decimal_places=2)

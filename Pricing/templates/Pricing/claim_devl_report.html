@@ -52,9 +52,14 @@
                               {{ factor_data_table|safe }}
                           </div>
                           <hr>
-                            <h6>Incurred Loss Development Triangle:</h6>
+                            <h6>Booked Incurred Loss Development Triangle (excludes pfad):</h6>
                           <div class="financial-data-table" style="margin-bottom: 40px;">
                               {{ incurred_data_table|safe }}
+                          </div>
+                          <hr>
+                            <h6>Booked Estimation Bias (excludes pfad):</h6>
+                          <div class="financial-data-table" style="margin-bottom: 40px;">
+                              {{ booked_error_data_table|safe }}
                           </div>
                         </div>
                     </div>

@@ -1,4 +1,5 @@
 import math
+from decimal import Decimal
 
 
 def reverse_pv_index(group):
@@ -8,7 +9,7 @@ def reverse_pv_index(group):
 
 def calculate_growth_rate(row, latest_year, earliest_year):
     g = min(0.07, max(-0.07, (row['in_force'] / row['beg_in_force']) ** (latest_year - earliest_year) - 1))
-    return g
+    return Decimal(g)
 
 
 def calculate_avg_profit(row, latest_year, earliest_year):

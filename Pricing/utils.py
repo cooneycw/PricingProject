@@ -1,4 +1,7 @@
 import math
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
 from decimal import Decimal
 
 
@@ -22,3 +25,20 @@ def calculate_avg_profit(row, latest_year, earliest_year):
 def calculate_future_value(row, latest_year, earliest_year, irr):
     result = row['in_force'] * row['avg_profit'] / (irr - row['capped_growth_rate'])
     return result
+
+
+def perform_logistic_regression(proj_year, data):
+    df = pd.DataFrame(data, columns=['Year', 'Value'])
+    df['Ln_Value'] = np.log(df['Value'])
+    feature_names = ['Year']
+    X = df[feature_names]
+    y = df['Ln_Value']
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    proj_data = pd.DataFrame([[proj_year]], columns=feature_names)
+    predicted_ln_value = model.predict(proj_data)
+
+    predicted_value = np.exp(predicted_ln_value)
+    return predicted_value

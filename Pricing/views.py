@@ -16,7 +16,7 @@ from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
-from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Triangles, Indications, Decisions, ChatMessage
+from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Triangles, ClaimTrends, Indications, Decisions, ChatMessage
 pd.set_option('display.max_columns', None)  # None means show all columns
 
 # Create your views here.
@@ -392,9 +392,11 @@ def game_dashboard(request, game_id):
     game = get_object_or_404(IndivGames,
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
     template_name = 'Pricing/dashboard.html'
+    green_list = ['Government officials', 'Injury reform', 'after observing']
     context = {
         'title': ' - Dashboard',
         'game': game,
+        'green_list': green_list
     }
     return render(request, template_name, context)
 
@@ -1139,6 +1141,7 @@ def valuation_report(request, game_id):
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:
         financial_data_table = '<p>No financial data available.</p>'
+        latest_year = None
 
     if len(unique_years) > 2:
         unique_years = unique_years[0:len(unique_years)-2]
@@ -1266,6 +1269,17 @@ def claim_devl_report(request, game_id):
 
             booked_error_data_table = transposed_booked_error_df_fmt.to_html(classes='my-financial-table', border=0, justify='initial',
                                                     index=True, escape=False)
+        else:
+            paid_data_table = '<p>No detailed financial data to display for the selected years.</p>'
+            incd_data_table = None
+            factor_data_table = None
+            booked_error_data_table = None
+    else:
+        paid_data_table = '<p>No financial data available.</p>'
+        incd_data_table = None
+        factor_data_table = None
+        booked_error_data_table = None
+        latest_year = None
 
     context = {
         'title': ' - Claim Development Report',
@@ -1447,6 +1461,11 @@ def claim_trend_report(request, game_id):
             trend_data_table = display_df_fmt.to_html(classes='my-financial-table',
                                                       border=0, justify='initial',
                                                       index=True, escape=False)
+        else:
+            trend_data_table = '<p>No detailed financial data to display for the selected years.</p>'
+    else:
+        trend_data_table = '<p>No financial data available.</p>'
+        latest_year = None
 
     context = {
         'title': ' - Claim Development Report',

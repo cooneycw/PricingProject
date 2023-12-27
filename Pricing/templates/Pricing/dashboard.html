@@ -56,6 +56,7 @@
     <!-- JavaScript to enable AJAX-based chat -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
+    const greenList = {{ green_list | safe }};
         $(document).ready(function() {
             const gameId = "{{ game.game_id }}";  // You can pass game_id through the Django context
             const user = "{{ user.username }}";
@@ -93,18 +94,28 @@
                         game_id: gameId,
                     },
                     success: function(data) {
-                        $('#chat-log').html('');  // Clear the chat log
-                    data.messages.forEach(function(message) {
-                        let row = `${message.from_sender} ${message.time}: ${message.content}`;
+                        $('#chat-log').html('');
+                        data.messages.forEach(function(message) {
+                            let row = `${message.from_sender} ${message.time}: ${message.content}`;
+                            let rowClass = 'chat-row';
 
-                        if (message.from_sender === "game_server" && message.content === "Review decisions.") {
-                            $('#chat-log').prepend('<div class="chat-row game-server special-message">' + row + '</div>');
-                        } else if (message.from_sender === "game_server") {
-                            $('#chat-log').prepend('<div class="chat-row game-server">' + row + '</div>');
-                        } else {
-                            $('#chat-log').prepend('<div class="chat-row">' + row + '</div>');
-                        }
-                    });
+                            // Check for special messages
+                            if (message.from_sender === "game_server" && message.content === "Review decisions.") {
+                                rowClass += ' game-server special-message';
+                            }  else if (message.from_sender === "game_server") {
+                                // Check if message contains any string from greenList
+                                greenList.forEach(function(greenString) {
+                                    if (message.content.includes(greenString)) {
+                                        rowClass += ' green-message';
+                                    }
+                                });
+                            }
+                            else if (message.from_sender === "game_server") {
+                                rowClass += ' game-server';
+                            }
+
+                            $('#chat-log').prepend('<div class="' + rowClass + '">' + row + '</div>');
+                        });
                     }
                 });
             }
@@ -136,6 +147,9 @@
   }
   .special-message {
     color: red;
+  }
+  .green-message {
+    color: green;
   }
 </style>
 {% endblock content %}

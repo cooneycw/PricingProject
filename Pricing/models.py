@@ -107,6 +107,12 @@ class Triangles(models.Model):
     triangles = models.JSONField()
 
 
+class ClaimTrends(models.Model):
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    year = models.IntegerField()
+    claim_trends = models.JSONField()
+
+
 class Indications(models.Model):
     game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
     player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)

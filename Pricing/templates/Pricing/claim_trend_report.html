@@ -41,10 +41,17 @@
                           </form>
                           <hr>
                             <div class="in-line">
-                                <h6>Claim Trend Estimates:</h6>
+                                <h6>Claim Trend Data:</h6>
                             </div>
                           <div class="financial-data-table" style="margin-bottom: 40px;">
                               {{ trend_data_table|safe }}
+                          </div>
+                        <hr>
+                            <div class="in-line">
+                                <h6>Claim Linear Estimates:</h6>
+                            </div>
+                          <div class="financial-data-table" style="margin-bottom: 40px;">
+                              {{ trend_est_table|safe }}
                           </div>
                         </div>
                     </div>

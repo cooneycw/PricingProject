@@ -27,18 +27,70 @@ def calculate_future_value(row, latest_year, earliest_year, irr):
     return result
 
 
-def perform_logistic_regression(proj_year, data):
+def perform_logistic_regression(data, reform_fact):
     df = pd.DataFrame(data, columns=['Year', 'Value'])
     df['Ln_Value'] = np.log(df['Value'])
-    feature_names = ['Year']
+    proj_year = max(df['Year'].values) + 1
+
+    reform = False
+    if sum(reform_fact) != len(reform_fact) and sum(reform_fact) > 0:
+        new_reform_fact = [0] * len(reform_fact)
+        for i in range(len(reform_fact)):
+            if reform_fact[i] == 1:
+                reform = True
+            if reform:
+                new_reform_fact[0:i + 1] = [1] * (i + 1)
+                break
+        df['Reform'] = new_reform_fact
+
+    if reform:
+        feature_names = ['Year', 'Reform']
+    else:
+        feature_names = ['Year']
+
     X = df[feature_names]
     y = df['Ln_Value']
 
-    model = LinearRegression()
+    model = LinearRegression(fit_intercept=True)
     model.fit(X, y)
 
-    proj_data = pd.DataFrame([[proj_year]], columns=feature_names)
-    predicted_ln_value = model.predict(proj_data)
+    if reform:
+        pred_df = df.drop(columns=['Ln_Value', 'Value'])
+        new_row_a = {'Year': proj_year, 'Reform': 1}
+        new_row_b = {'Year': proj_year, 'Reform': 0}
+        pred_df = pd.concat([pred_df, pd.DataFrame([new_row_a]), pd.DataFrame([new_row_b])], ignore_index=True)
+        pred_df = pred_df.sort_values(by=['Year', 'Reform'], ascending=[True, True])
+        predicted_ln_value = model.predict(pred_df)
+        predicted_value = np.exp(predicted_ln_value)
+        last_yr_reform = predicted_value[len(predicted_value) - 1]
+        last_yr_no_reform = predicted_value[len(predicted_value) - 2]
+        prior_yr_reform = predicted_value[len(predicted_value) - 3]
+        if prior_yr_reform != 0:
+            est = [last_yr_reform / prior_yr_reform - 1]
+        else:
+            est = [0]
+        if last_yr_no_reform != 0:
+            est.append(last_yr_reform / last_yr_no_reform - 1)
+        else:
+            est.append(0)
 
-    predicted_value = np.exp(predicted_ln_value)
-    return predicted_value
+        ret_preds = list(predicted_value[0:len(reform_fact)])
+        ret_preds.append(predicted_value[-1])
+        return reform, est, ret_preds
+    else:
+        df = df.drop(columns=['Ln_Value', 'Value'])
+        new_row_a = {'Year': 2023}
+        df = pd.concat([df, pd.DataFrame([new_row_a])], ignore_index=True)
+        df = df.sort_values(by=['Year'], ascending=[True])
+        predicted_ln_value = model.predict(df)
+        predicted_value = np.exp(predicted_ln_value)
+        last_yr_no_reform = predicted_value[len(predicted_value) - 1]
+        prior_yr_no_reform = predicted_value[len(predicted_value) - 2]
+        if last_yr_no_reform != 0:
+            est = [last_yr_no_reform / prior_yr_no_reform - 1]
+        else:
+            est = [0]
+
+        ret_preds = list(predicted_value[0:len(reform_fact)])
+        ret_preds.append(predicted_value[-1])
+        return reform, est, ret_preds

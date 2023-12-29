@@ -392,7 +392,7 @@ def game_dashboard(request, game_id):
     game = get_object_or_404(IndivGames,
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
     template_name = 'Pricing/dashboard.html'
-    green_list = ['Government officials', 'Injury reform', 'after observing']
+    green_list = ['Government officials', 'Injury reform', 'product reform', 'after observing']
     context = {
         'title': ' - Dashboard',
         'game': game,
@@ -1327,6 +1327,7 @@ def claim_trend_report(request, game_id):
 
     triangle_data = Triangles.objects.filter(game_id=game, player_id=user)
     financial_data = Financials.objects.filter(game_id=game, player_id=user)
+    claimtrend_data = ClaimTrends.objects.filter(game_id=game)
 
     unique_years = triangle_data.order_by('-year').values_list('year', flat=True).distinct()
     if unique_years:  # Proceed if there are any financial years available
@@ -1334,6 +1335,7 @@ def claim_trend_report(request, game_id):
         financial_df = pd.DataFrame(financial_data_list)
         triangle_data_list = list(triangle_data.values('id', 'player_name', 'year', 'triangles'))
         triangle_df = pd.DataFrame(triangle_data_list)
+
 
     # Creating a DataFrame from the obtained data
         if not triangle_df.empty:
@@ -1343,13 +1345,25 @@ def claim_trend_report(request, game_id):
                 selected_year = unique_years[0]
             triangle_df = triangle_df[triangle_df['year'] == selected_year]
             financial_df = financial_df[financial_df['year'] >= (selected_year - 5)]
+            claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
+            if claimtrend_obj:
+                claimtrend_dict = claimtrend_obj.claim_trends
+
 
             claim_data = triangle_df.triangles[0]['triangles']
             clm_yrs = [acc_yr for acc_yr in claim_data['acc_yrs']]
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
             devl_mths = [(yr + 1)*12 for yr in claim_data['devl_yrs']]
             covg = ['paid_bi', 'paid_cl', 'paid_to'][selected_coverage]
-            incd_covg = ['incd_bi', 'incd_cl', 'incd_to'][selected_coverage]
+
+            reform_fact = []
+            for yr in reversed(clm_yrs):
+                if selected_coverage == 2:
+                    reform_fact.append(claimtrend_dict['bi_reform'][f'{yr}'] or claimtrend_dict['cl_reform'][f'{yr}'])
+                elif selected_coverage == 1:
+                    reform_fact.append(claimtrend_dict['cl_reform'][f'{yr}'])
+                elif selected_coverage == 0:
+                    reform_fact.append(claimtrend_dict['bi_reform'][f'{yr}'])
 
             df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
             for i, devl_mth in enumerate(devl_mths):
@@ -1379,11 +1393,18 @@ def claim_trend_report(request, game_id):
                     fact_df.iloc[2, 0] = numerator / denominator
                     fact_df.iloc[1, 0] = fact_df.iloc[1, 0] * fact_df.iloc[2, 0]
 
-            cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost', 'Claim Count', 'Frequency', 'Severity']
+            cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost', 'Claim Count', 'Frequency', 'Severity', 'Product Reform']
+            proj_cols = ['Est Loss Cost', 'Est LC Trend', 'Est LC Reform', 'Est Frequency', 'Est Freq Trend',
+                         'Est Freq Reform', 'Est Severity', 'Est Sev Trend', 'Est Sev Reform']
             display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
             display_yrs.reverse()
+            proj_display_yrs = copy.deepcopy(display_yrs)
+            proj_display_yrs.insert(0, f'Est Acc Yr {max(claim_data["acc_yrs"]) + 1}')
             display_df = pd.DataFrame(columns=display_yrs, index=cols)
             display_df_fmt = pd.DataFrame(columns=display_yrs, index=cols)
+
+            proj_display_df = pd.DataFrame(columns=proj_display_yrs, index=proj_cols)
+            proj_display_df_fmt = pd.DataFrame(columns=proj_display_yrs, index=proj_cols)
             i = 0
             est_values = dict()
             for categ, row in display_df.iterrows():
@@ -1414,8 +1435,7 @@ def claim_trend_report(request, game_id):
                         else:
                             display_df.iloc[i, n] = 0
                     lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
-                    proj_lcost = perform_logistic_regression(max(clm_yrs) + 1, lcost)
-                    est_values[i] = f'${proj_lcost[0]:,.2f}'
+                    est_values['reform'], est_values['proj_lcost_est'], est_values['proj_lcost'] = perform_logistic_regression(lcost, reform_fact)
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 elif categ == 'Claim Count':
                     for o in range(len(acc_yrs)):
@@ -1432,8 +1452,7 @@ def claim_trend_report(request, game_id):
                         else:
                             display_df.iloc[i, p] = 0
                     freq = [(clm_yrs[len(clm_yrs) - q - 1], float(freq)) for q, freq in enumerate(display_df.iloc[i].values)]
-                    proj_freq = perform_logistic_regression(max(clm_yrs) + 1, freq)
-                    est_values[i] = f'{proj_freq[0]:,.1f}%'
+                    _, est_values['proj_freq_est'], est_values['proj_freq'] = perform_logistic_regression(freq, reform_fact)
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.1f}%'.format(x))
                 elif categ == 'Severity':
                     for q in range(len(acc_yrs)):
@@ -1443,34 +1462,103 @@ def claim_trend_report(request, game_id):
                         else:
                             display_df.iloc[i, q] = 0
                     sev = [(clm_yrs[len(clm_yrs) - q - 1], float(sev)) for q, sev in enumerate(display_df.iloc[i].values)]
-                    proj_sev = perform_logistic_regression(max(clm_yrs) + 1, sev)
-                    est_values[i] = f'${proj_sev[0]:,.2f}'
+                    _, est_values['proj_sev_est'], est_values['proj_sev'] = perform_logistic_regression(sev, reform_fact)
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Product Reform':
+                    for r in range(len(acc_yrs)):
+                        if reform_fact[r] == 1: # note that reform fact not reversed (this is done in prediction util)
+                            display_df.iloc[i, r] = 'Yes'
+                        else:
+                            display_df.iloc[i, r] = 'No'
+                    display_df_fmt.iloc[i] = display_df.iloc[i]
                 i += 1
 
-            display_df_fmt.insert(0, f'Est Trend {max(clm_yrs) + 1}', '')
-            for key in est_values.keys():
-                display_df_fmt.iloc[key, 0] = '<span class="blue-text">' + est_values[key] + '</span>'
+            z = 0
+            for categ, row in proj_display_df.iterrows():
+                if categ == 'Est Loss Cost':
+                    for j in range(len(acc_yrs) + 1):
+                        proj_display_df.iloc[z, j] = est_values['proj_lcost'][len(acc_yrs) - j]
+                    proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Est LC Trend':
+                    proj_display_df.iloc[z] = 0
+                    proj_display_df.iloc[z, 0] = est_values['proj_lcost_est'][0]
+                    proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '{:,.1f}%'.format(100*x))
+                elif categ == 'Est LC Reform':
+                    proj_display_df.iloc[z] = 0
+                    if est_values['reform']:
+                        proj_display_df.iloc[z, 0] = est_values['proj_lcost_est'][1]
+                        proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '{:,.1f}%'.format(100 * x))
+                    else:
+                        proj_display_df.iloc[z, 0] = 'N/A'
+                        proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else x)
+                elif categ == 'Est Frequency':
+                    for j in range(len(acc_yrs) + 1):
+                        proj_display_df.iloc[z, j] = est_values['proj_freq'][len(acc_yrs) - j]
+                    proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '{:,.1f}%'.format(x))
+                elif categ == 'Est Freq Trend':
+                    proj_display_df.iloc[z] = 0
+                    proj_display_df.iloc[z, 0] = est_values['proj_freq_est'][0]
+                    proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '{:,.1f}%'.format(100 * x))
+                elif categ == 'Est Freq Reform':
+                    proj_display_df.iloc[z] = 0
+                    if est_values['reform']:
+                        proj_display_df.iloc[z, 0] = est_values['proj_freq_est'][1]
+                        proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '{:,.1f}%'.format(100 * x))
+                    else:
+                        proj_display_df.iloc[z, 0] = 'N/A'
+                        proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else x)
+                elif categ == 'Est Severity':
+                    for j in range(len(acc_yrs) + 1):
+                        proj_display_df.iloc[z, j] = est_values['proj_sev'][len(acc_yrs) - j]
+                    proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Est Sev Trend':
+                    proj_display_df.iloc[z] = 0
+                    proj_display_df.iloc[z, 0] = est_values['proj_sev_est'][0]
+                    proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '{:,.1f}%'.format(100 * x))
+                elif categ == 'Est Sev Reform':
+                    proj_display_df.iloc[z] = 0
+                    if est_values['reform']:
+                        proj_display_df.iloc[z, 0] = est_values['proj_sev_est'][1]
+                        proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else '{:,.1f}%'.format(100 * x))
+                    else:
+                        proj_display_df.iloc[z, 0] = 'N/A'
+                        proj_display_df_fmt.iloc[z] = proj_display_df.iloc[z].map(lambda x: '' if x == 0 else x)
+                z += 1
+
+            display_df_fmt.insert(0, ' ', '')
 
             index_list = [3, 5, 7, 9]  # insert blank rows
+            proj_index_list = [3, 7]
             blank_row = pd.DataFrame([['' for _ in display_df_fmt.columns]], columns=display_df_fmt.columns)
             for index in index_list:
                 display_df_fmt = pd.concat([display_df_fmt.iloc[:index], blank_row, display_df_fmt.iloc[index:]])
                 display_df_fmt.index = display_df_fmt.index.where(display_df_fmt.index != 0, ' ')
 
+            proj_blank_row = pd.DataFrame([['' for _ in proj_display_df_fmt.columns]], columns=proj_display_df_fmt.columns)
+            for index in proj_index_list:
+                proj_display_df_fmt = pd.concat([proj_display_df_fmt.iloc[:index], proj_blank_row, proj_display_df_fmt.iloc[index:]])
+                proj_display_df_fmt.index = proj_display_df_fmt.index.where(proj_display_df_fmt.index != 0, ' ')
+
             trend_data_table = display_df_fmt.to_html(classes='my-financial-table',
+                                                      border=0, justify='initial',
+                                                      index=True, escape=False)
+
+            trend_est_table = proj_display_df_fmt.to_html(classes='my-financial-table',
                                                       border=0, justify='initial',
                                                       index=True, escape=False)
         else:
             trend_data_table = '<p>No detailed financial data to display for the selected years.</p>'
+            trend_est_table = None
     else:
         trend_data_table = '<p>No financial data available.</p>'
+        trend_est_table = None
         latest_year = None
 
     context = {
         'title': ' - Claim Development Report',
         'game': game,
         'trend_data_table': trend_data_table,
+        'trend_est_table': trend_est_table,
         'has_financial_data': triangle_data.exists(),
         'unique_years': unique_years,
         'latest_year': latest_year,

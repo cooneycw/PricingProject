@@ -549,12 +549,14 @@ def mktgsales_report(request, game_id):
             df_bottom_mktshare = transposed_df_close.iloc[insert_position_mktshare:]
             transposed_df = pd.concat([df_top_mktshare, mkt_share_ratio_df, df_bottom_mktshare])
 
+            selected_columns = [col for col in transposed_df.columns if int(col) <= selected_year]
+            transposed_df = transposed_df[selected_columns]
             # Convert the final, formatted DataFrame to HTML for rendering
             if len(transposed_df.columns) < 4:
                 # If there are fewer than four years of data, we'll simulate the rest as empty columns
                 missing_years = 4 - len(transposed_df.columns)
                 for i in range(missing_years):
-                    transposed_df[f'{selected_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
+                    transposed_df[f'{min(selected_columns) - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
 
             index = 1
             blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
@@ -692,12 +694,14 @@ def financials_report(request, game_id):
                 # Apply renaming to make the index/rows human-readable
                 transposed_df.rename(index={index: new_row_name}, inplace=True)
 
+            selected_columns = [col for col in transposed_df.columns if int(col) <= selected_year]
+            transposed_df = transposed_df[selected_columns]
             # Convert the final, formatted DataFrame to HTML for rendering
             if len(transposed_df.columns) < 4:
                 # If there are fewer than four years of data, we'll simulate the rest as empty columns
                 missing_years = 4 - len(transposed_df.columns)
                 for i in range(missing_years):
-                    transposed_df[f'{selected_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
+                    transposed_df[f'{min(selected_columns) - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
 
             index = 2
             blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
@@ -903,12 +907,14 @@ def industry_reports(request, game_id):
             df_bottom_loss_ratio = transposed_df_exp.iloc[insert_position_loss_ratio:]
             transposed_df = pd.concat([df_top_loss_ratio, loss_ratio_df, df_bottom_loss_ratio])
 
+            selected_columns = [col for col in transposed_df.columns if int(col) <= selected_year]
+            transposed_df = transposed_df[selected_columns]
             # Convert the final, formatted DataFrame to HTML for rendering
             if len(transposed_df.columns) < 4:
                 # If there are fewer than four years of data, we'll simulate the rest as empty columns
                 missing_years = 4 - len(transposed_df.columns)
                 for i in range(missing_years):
-                    transposed_df[f'{selected_year - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
+                    transposed_df[f'{min(selected_columns) - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
 
             index = 1
             blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)

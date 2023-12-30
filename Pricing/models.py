@@ -118,6 +118,7 @@ class Indications(models.Model):
     player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     player_name = models.CharField(max_length=128, null=True, blank=True)
     year = models.IntegerField()
+    indication_data = models.JSONField()
 
 
 class Decisions(models.Model):

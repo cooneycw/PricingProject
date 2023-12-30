@@ -1575,23 +1575,62 @@ def decision_input(request, game_id):
     game = get_object_or_404(IndivGames,
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
 
-    template_name = 'Pricing/decision_input.html'
-    indication_data = Indications.objects.filter(game_id=game)
-    unique_players = indication_data.order_by('player_id').values_list('player_name', flat=True).distinct()
-
-    selected_player = None
-    financial_data_table = None
-
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
-    valuation_data = None
+
+    selected_year = request.POST.get('year')  # Get the selected year from the query parameters
+    selected_year = int(selected_year) if selected_year else None
+
+    template_name = 'Pricing/decision_input.html'
+
+    indication_data = Indications.objects.filter(game_id=game)
+    triangle_data = Triangles.objects.filter(game_id=game, player_id=user)
+    financial_data = Financials.objects.filter(game_id=game, player_id=user)
+    claimtrend_data = ClaimTrends.objects.filter(game_id=game)
+
+    unique_years = triangle_data.order_by('-year').values_list('year', flat=True).distinct()
+    if unique_years:  # Proceed if there are any financial years available
+        financial_data_list = list(financial_data.values('year', 'in_force', 'written_premium', 'capital_ratio',
+                                                         'capital_test'))
+        financial_df = pd.DataFrame(financial_data_list)
+        triangle_data_list = list(triangle_data.values('id', 'player_name', 'year', 'triangles'))
+        triangle_df = pd.DataFrame(triangle_data_list)
+
+    # Creating a DataFrame from the obtained data
+        if not triangle_df.empty:
+            all_data_years = triangle_df['year'].unique()  # Get all unique years
+            latest_year = all_data_years.max()
+            if selected_year not in unique_years:
+                selected_year = unique_years[0]
+            triangle_df = triangle_df[triangle_df['year'] == selected_year]
+            financial_df = financial_df[financial_df['year'] >= (selected_year - 5)]
+            claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
+
+            if claimtrend_obj:
+                claimtrend_dict = claimtrend_obj.claim_trends
+
+
+            claim_data = triangle_df.triangles[0]['triangles']
+            clm_yrs = [acc_yr for acc_yr in claim_data['acc_yrs']]
+            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                         index=True)
+
+
+        else:
+            financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
+    else:
+        financial_data_table = '<p>No financial data available.</p>'
+        latest_year = None
+
+
+
     context = {
         'title': ' - Decision Input',
         'game': game,
         'financial_data_table': financial_data_table,
-        'has_financial_data': valuation_data.exists(),
-        'unique_players': unique_players,
-        'selected_player': selected_player,
+        'has_financial_data': financial_data.exists(),
+        'unique_years': unique_years,
+        'selected_year': selected_year,
     }
     return render(request, template_name, context)
 

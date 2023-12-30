@@ -8,7 +8,7 @@
                 <div class="block-heading" style="text-align:center">
                     <div class="container">
                         <div class="row">
-                            <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
+                            <div class="col-md-8"> <!-- Limit to 25% of the screen width -->
                                 <h5>Message Centre</h5>
                                 <div id="chat-example" class="block-heading" style="text-align:left; border: 3px solid #2196F3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                     <!-- Chat interface -->
@@ -18,32 +18,32 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <h5>Decision Centre</h5>
+                            <div class="col-md-4">
+                                <h5 style="margin-bottom: 45px;">Decision Centre</h5>
                                     <div class="row"> <!-- Additional nested row for the images -->
                                         <div class="col-md-3 mb-3">
-                                            <a href="{% url 'Pricing-mktgsales_report' game.game_id %}" class="report-icon" title="Marketing / Sales Report"><img src="{% static 'Pricing/001_mktgsales.png'  %}" alt="Marketing / Sales Report" width="100"></a>
+                                            <a href="{% url 'Pricing-mktgsales_report' game.game_id %}" class="report-icon" title="Marketing / Sales Report"><img src="{% static 'Pricing/001_advertising.png'  %}" alt="Marketing / Sales Report" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="{% url 'Pricing-financials_report' game.game_id %}" class="report-icon" title="Financial Statements"><img src="{% static 'Pricing/002_financials.png'  %}" alt="Financial Report" width="100"></a>
+                                            <a href="{% url 'Pricing-financials_report' game.game_id %}" class="report-icon" title="Financial Statements"><img src="{% static 'Pricing/002_accounting.png'  %}" alt="Financial Report" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="{% url 'Pricing-industry_reports' game.game_id %}" class="report-icon" title="Industry Reports"><img src="{% static 'Pricing/003_industry.png'  %}" alt="Industry Reports" width="100"></a>
+                                            <a href="{% url 'Pricing-industry_reports' game.game_id %}" class="report-icon" title="Industry Reports"><img src="{% static 'Pricing/003_ins_industry.png'  %}" alt="Industry Reports" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="{% url 'Pricing-claim_devl_report' game.game_id %}" class="report-icon" title="Claim Development Report"><img src="{% static 'Pricing/004_claim_development.png'  %}" alt="Claim Development Report" width="100"></a>
+                                            <a href="{% url 'Pricing-claim_devl_report' game.game_id %}" class="report-icon" title="Claim Development Report"><img src="{% static 'Pricing/004_triangle.png'  %}" alt="Claim Development Report" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="{% url 'Pricing-claim_trend_report' game.game_id %}" class="report-icon" title="Claim Trend Report"><img src="{% static 'Pricing/005_claims.png'  %}" alt="Claim Trend Report" width="100"></a>
+                                            <a href="{% url 'Pricing-claim_trend_report' game.game_id %}" class="report-icon" title="Claim Trend Report"><img src="{% static 'Pricing/005_claims.png'  %}" alt="Claim Trend Report" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="#" class="report-icon" title="Segmentation Report"><img src="{% static 'Pricing/006_segmentation.png'  %}" alt="Segmentation Report" width="100"></a>
+                                            <a href="#" class="report-icon" title="Advanced Analytics"><img src="{% static 'Pricing/006_artificial_intelligence.png'  %}" alt="Advanced Analytics" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="{% url 'Pricing-valuation_report' game.game_id %}" class="report-icon" title="Valuation Report"><img src="{% static 'Pricing/007_diamond.png'  %}" alt="Valuation Report" width="100"></a>
+                                            <a href="{% url 'Pricing-valuation_report' game.game_id %}" class="report-icon" title="Valuation Report"><img src="{% static 'Pricing/007_diamond.png'  %}" alt="Valuation Report" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="{% url 'Pricing-decision_input' game.game_id %}" class="report-icon" title="Submit Decisions"><img src="{% static 'Pricing/008_decisions.png'  %}" alt="Decision Input" width="100"></a>
+                                            <a href="{% url 'Pricing-decision_input' game.game_id %}" class="report-icon" title="Submit Decisions"><img src="{% static 'Pricing/008_decisions.png'  %}" alt="Decision Input" width="80"></a>
                                         </div>
                                 </div>
                             </div>
@@ -99,19 +99,24 @@
                             let row = `${message.from_sender} ${message.time}: ${message.content}`;
                             let rowClass = 'chat-row';
 
-                            // Check for special messages
                             if (message.from_sender === "game_server" && message.content === "Review decisions.") {
                                 rowClass += ' game-server special-message';
-                            }  else if (message.from_sender === "game_server") {
+                            } else if (message.from_sender === "game_server") {
+                                let isGreenMessage = false;
+
                                 // Check if message contains any string from greenList
                                 greenList.forEach(function(greenString) {
                                     if (message.content.includes(greenString)) {
-                                        rowClass += ' green-message';
+                                        isGreenMessage = true;
+                                        return; // Break out of the loop if a greenString is found
                                     }
                                 });
-                            }
-                            else if (message.from_sender === "game_server") {
-                                rowClass += ' game-server';
+
+                                if (isGreenMessage) {
+                                    rowClass += ' green-message';
+                                } else {
+                                    rowClass += ' game-server';
+                                }
                             }
 
                             $('#chat-log').prepend('<div class="' + rowClass + '">' + row + '</div>');
@@ -135,6 +140,7 @@
   }
   .chat-row {
     white-space: pre;
+      color: blue;
   }
   .report-icons {
     display: flex;
@@ -143,7 +149,7 @@
     margin-top: 20px; /* Add some spacing between the message box and icons */
     }
   .game-server {
-    color: blue;
+    color: #3f3f46;
   }
   .special-message {
     color: red;

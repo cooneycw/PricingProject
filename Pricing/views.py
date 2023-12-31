@@ -1561,7 +1561,7 @@ def claim_trend_report(request, game_id):
         latest_year = None
 
     context = {
-        'title': ' - Claim Development Report',
+        'title': ' - Claim Trend Report',
         'game': game,
         'trend_data_table': trend_data_table,
         'trend_est_table': trend_est_table,
@@ -1589,52 +1589,102 @@ def decision_input(request, game_id):
 
     template_name = 'Pricing/decision_input.html'
 
-    indication_data = Indications.objects.filter(game_id=game)
-    triangle_data = Triangles.objects.filter(game_id=game, player_id=user)
-    financial_data = Financials.objects.filter(game_id=game, player_id=user)
-    claimtrend_data = ClaimTrends.objects.filter(game_id=game)
+    indication_obj = Indications.objects.filter(game_id=game, player_id=user)
 
-    unique_years = triangle_data.order_by('-year').values_list('year', flat=True).distinct()
+    unique_years = indication_obj.order_by('-year').values_list('year', flat=True).distinct()
     if unique_years:  # Proceed if there are any financial years available
-        financial_data_list = list(financial_data.values('year', 'in_force', 'written_premium', 'capital_ratio',
-                                                         'capital_test'))
-        financial_df = pd.DataFrame(financial_data_list)
-        triangle_data_list = list(triangle_data.values('id', 'player_name', 'year', 'triangles'))
-        triangle_df = pd.DataFrame(triangle_data_list)
+        indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']['indication_data']
+        devl_data = indication_data_dict['devl_data']
+        clm_yrs = indication_data_dict['acc_yrs']
+        acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
+        devl_mths = indication_data_dict['devl_mths']
 
-    # Creating a DataFrame from the obtained data
-        if not triangle_df.empty:
-            all_data_years = triangle_df['year'].unique()  # Get all unique years
-            latest_year = all_data_years.max()
-            if selected_year not in unique_years:
-                selected_year = unique_years[0]
-            triangle_df = triangle_df[triangle_df['year'] == selected_year]
-            financial_df = financial_df[financial_df['year'] >= (selected_year - 5)]
-            claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
+        df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
+        for i, devl_mth in enumerate(devl_mths):
+            df.loc[devl_mth] = devl_data[i]
 
-            if claimtrend_obj:
-                claimtrend_dict = claimtrend_obj.claim_trends
+        transposed_df = df.T
 
+        fact_labels = ['Age-to-Age']
+        fact_devl_mths = copy.deepcopy(devl_mths)
+        fact_devl_mths[0] = None
+        fact_df = pd.DataFrame(columns=fact_labels, index=fact_devl_mths)
 
-            claim_data = triangle_df.triangles[0]['triangles']
-            clm_yrs = [acc_yr for acc_yr in claim_data['acc_yrs']]
-            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
-                                                         index=True)
+        for i, fact_devl_mth in enumerate(fact_devl_mths):
+            if fact_devl_mth == fact_devl_mths[0]:
+                fact_df.iloc[0, 0] = 0
+            if fact_devl_mth == fact_devl_mths[1]:
+                numerator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 1])
+                denominator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 0])
+                if denominator == 0:
+                    denominator = 1
+                fact_df.iloc[1, 0] = numerator / denominator
+            if fact_devl_mth == fact_devl_mths[2]:
+                numerator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 2])
+                denominator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 1])
+                if denominator == 0:
+                    denominator = 1
+                fact_df.iloc[2, 0] = numerator / denominator
+                fact_df.iloc[1, 0] = fact_df.iloc[1, 0] * fact_df.iloc[2, 0]
 
+        cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost']
+        display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
+        display_yrs.reverse()
+        display_df = pd.DataFrame(columns=display_yrs, index=cols)
+        display_df_fmt = pd.DataFrame(columns=display_yrs, index=cols)
+        i = 0
+        est_values = dict()
+        for categ, row in display_df.iterrows():
+            if categ == 'Actual Paid':
+                for j in range(len(acc_yrs)):
+                    display_df.iloc[i, j] = df.iloc[min(j, len(devl_mths) - 1), len(acc_yrs) - j - 1]
+                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
+            elif categ == 'Devl Factor':
+                for k in range(len(acc_yrs)):
+                    if k < 2:
+                        display_df.iloc[i, k] = fact_df.iloc[k + 1].values[0]
+                    else:
+                        display_df.iloc[i, k] = 1
+                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
+            elif categ == 'Ultimate Incurred':
+                for l in range(len(acc_yrs)):
+                    display_df.iloc[i, l] = display_df.iloc[i - 2, l] * display_df.iloc[i - 1, l]
+                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
+            elif categ == 'In-Force':
+                for m in range(len(acc_yrs)):
+                    display_df.iloc[i, m] = financial_df.iloc[len(acc_yrs) - m - 1, 1]
+                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
+            elif categ == 'Loss Cost':
+                for n in range(len(acc_yrs)):
+                    denom = display_df.iloc[i - 1, n]
+                    if denom != 0:
+                        display_df.iloc[i, n] = decimal.Decimal(display_df.iloc[i - 2, n]) / denom
+                    else:
+                        display_df.iloc[i, n] = 0
+                lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
+                proj_lcost = perform_logistic_regression(max(clm_yrs) + 1, lcost)
+                est_values[i] = f'${proj_lcost[0]:,.2f}'
+                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
 
-        else:
-            financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
+        # Creating a DataFrame from the obtained data
+
+        all_data_years = copy.deepcopy(clm_yrs)  # Get all unique years
+        all_data_years.reverse()
+
+        if selected_year not in unique_years:
+            selected_year = unique_years[0]
+
+        financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
+                                                     index=True)
+
     else:
         financial_data_table = '<p>No financial data available.</p>'
-        latest_year = None
-
-
 
     context = {
-        'title': ' - Decision Input',
+        'title': ' - Indication / Decisions',
         'game': game,
         'financial_data_table': financial_data_table,
-        'has_financial_data': financial_data.exists(),
+        'has_financial_data': indication_obj.exists(),
         'unique_years': unique_years,
         'selected_year': selected_year,
     }

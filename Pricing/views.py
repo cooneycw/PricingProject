@@ -433,7 +433,7 @@ def game_dashboard(request, game_id):
         'decisions_frozen': decisions_frozen,
         'green_list': green_list
     }
-    print(f'context: {context}')
+
     return render(request, template_name, context)
 
 

@@ -4,13 +4,36 @@
 {% block content %}
     <main class="page landing-page">
         <section class="clean-block clean-info dark">
-            <div class="container">
-                <div class="block-heading" style="text-align:center; margin-bottom: 0;">
-                    <form method="POST">
-                        {% csrf_token %}
-                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
-                    </form>
+            <div class="container" style="text-align:center">
+                <div class="container">
+                    <div class="block-heading" style="text-align:center; margin-bottom: 24px;">
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
+                        </form>
+                    </div>
                 </div>
+                    <div class="container">
+                        <div class="row">
+                            <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
+                                <h5>Indication Centre</h5>
+                                <div class="block-heading" style="text-align:left; border: 3px solid #2196f3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                    <!-- Insert Reports -->
+
+                                </div>
+                            </div>
+                            <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
+                                <h5>Decision Centre</h5>
+                                <div class="block-heading" style="text-align:left; border: 3px solid #2196F3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                    <!-- Insert Reports -->
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+            <div class="container">
+
                 {% if not has_financial_data %}
                     <div class="block-heading" style="text-align: left">
                         <p>Indication data processing not yet complete.  Please await notification in the Message Centre.</p>
@@ -45,7 +68,7 @@
  <script>
     document.addEventListener('DOMContentLoaded', function() {
         // Select all table rows within the financial-data-table
-        var tableRows = document.querySelectorAll('.mktgsales-data-table tr');
+        var tableRows = document.querySelectorAll('.financial-data-table tr');
 
         // Loop through each table row
         tableRows.forEach(function(row) {

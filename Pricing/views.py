@@ -4,7 +4,7 @@ import pytz
 import numpy as np
 import pandas as pd
 import decimal
-from .utils import reverse_pv_index, calculate_growth_rate, calculate_avg_profit, calculate_future_value, perform_logistic_regression
+from .utils import reverse_pv_index, calculate_growth_rate, calculate_avg_profit, calculate_future_value, perform_logistic_regression, perform_logistic_regression_indication
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
@@ -18,6 +18,7 @@ from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
 from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Triangles, ClaimTrends, Indications, Decisions, ChatMessage
 pd.set_option('display.max_columns', None)  # None means show all columns
+
 
 # Create your views here.
 def home(request):
@@ -391,13 +392,48 @@ def game_dashboard(request, game_id):
     user = request.user
     game = get_object_or_404(IndivGames,
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    decisions_obj = Decisions.objects.filter(game_id=game, player_id=user)
+
+    unique_years = decisions_obj.order_by('-year').values_list('year', flat=True).distinct()
+    latest_year = unique_years[0] if unique_years else None
+    current_datetime = None
+    target_datetime = None
+    decisions_frozen = True
+
+    if unique_years:  # Proceed if there are any financial years available
+        # Querying the database
+        decisions_data_list = list(decisions_obj.values('year', 'decisions_game_stage', 'decisions_time_stamp', 'decisions_locked'))
+
+        # Creating a DataFrame from the obtained data
+        df = pd.DataFrame(decisions_data_list)
+
+        if not df.empty:
+            print(f'df not empty. latest_year: {latest_year}')
+            # Filter out only the rows belonging to the latest four years
+            latest_df = df[df['year'] == latest_year]
+
+            if latest_df['decisions_game_stage'].values[0] == 'decisions':
+                if not latest_df['decisions_locked'].values[0]:
+                    decisions_frozen = False
+                    target_datetime = latest_df['decisions_time_stamp'].values[0]['future_time']
+                    current_datetime = latest_df['decisions_time_stamp'].values[0]['current_time']
+                else:
+                    pass
+            else:
+                pass
+
     template_name = 'Pricing/dashboard.html'
     green_list = ['Government officials', 'Injury reform', 'product reform', 'after observing']
+
     context = {
         'title': ' - Dashboard',
         'game': game,
+        'current_datetime': current_datetime,
+        'target_datetime': target_datetime,
+        'decisions_frozen': decisions_frozen,
         'green_list': green_list
     }
+    print(f'context: {context}')
     return render(request, template_name, context)
 
 
@@ -1355,7 +1391,6 @@ def claim_trend_report(request, game_id):
             if claimtrend_obj:
                 claimtrend_dict = claimtrend_obj.claim_trends
 
-
             claim_data = triangle_df.triangles[0]['triangles']
             clm_yrs = [acc_yr for acc_yr in claim_data['acc_yrs']]
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
@@ -1473,9 +1508,9 @@ def claim_trend_report(request, game_id):
                 elif categ == 'Product Reform':
                     for r in range(len(acc_yrs)):
                         if reform_fact[r] == 1: # note that reform fact not reversed (this is done in prediction util)
-                            display_df.iloc[i, r] = 'Yes'
+                            display_df.iloc[i, r] = '<span class="red-text">' + 'Yes' + '</span>'
                         else:
-                            display_df.iloc[i, r] = 'No'
+                            display_df.iloc[i, r] = '<span class="blue-text">' + 'No' + '</span>'
                     display_df_fmt.iloc[i] = display_df.iloc[i]
                 i += 1
 
@@ -1590,93 +1625,164 @@ def decision_input(request, game_id):
     template_name = 'Pricing/decision_input.html'
 
     indication_obj = Indications.objects.filter(game_id=game, player_id=user)
+    claimtrend_data = ClaimTrends.objects.filter(game_id=game)
+    financial_data = Financials.objects.filter(game_id=game, player_id=user)
 
     unique_years = indication_obj.order_by('-year').values_list('year', flat=True).distinct()
     if unique_years:  # Proceed if there are any financial years available
-        indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']['indication_data']
-        devl_data = indication_data_dict['devl_data']
-        clm_yrs = indication_data_dict['acc_yrs']
-        acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
-        devl_mths = indication_data_dict['devl_mths']
+        financial_data_list = list(financial_data.values('year', 'in_force'))
+        financial_df = pd.DataFrame(financial_data_list)
+        if not financial_df.empty:
+            indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']['indication_data']
+            devl_data = indication_data_dict['devl_data']
+            wts = indication_data_dict['indic_wts']
+            fixed_exp = decimal.Decimal(indication_data_dict['fixed_exp'])
+            prem_var_cost = decimal.Decimal(indication_data_dict['prem_var_cost'])
+            expos_var_cost = decimal.Decimal(indication_data_dict['expos_var_cost'])
+            mct_capital_reqd = decimal.Decimal(indication_data_dict['mct_capital_reqd'])
+            pass_capital_test = indication_data_dict['pass_capital_test']
+            capital = decimal.Decimal(indication_data_dict['capital'])
+            clm_yrs = indication_data_dict['acc_yrs']
+            acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
+            devl_mths = indication_data_dict['devl_mths']
 
-        df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
-        for i, devl_mth in enumerate(devl_mths):
-            df.loc[devl_mth] = devl_data[i]
+            all_data_years = copy.deepcopy(clm_yrs)  # Get all unique years
+            all_data_years.reverse()
 
-        transposed_df = df.T
+            if selected_year not in unique_years:
+                selected_year = unique_years[0]
 
-        fact_labels = ['Age-to-Age']
-        fact_devl_mths = copy.deepcopy(devl_mths)
-        fact_devl_mths[0] = None
-        fact_df = pd.DataFrame(columns=fact_labels, index=fact_devl_mths)
+            claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
+            if claimtrend_obj:
+                claimtrend_dict = claimtrend_obj.claim_trends
 
-        for i, fact_devl_mth in enumerate(fact_devl_mths):
-            if fact_devl_mth == fact_devl_mths[0]:
-                fact_df.iloc[0, 0] = 0
-            if fact_devl_mth == fact_devl_mths[1]:
-                numerator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 1])
-                denominator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 0])
-                if denominator == 0:
-                    denominator = 1
-                fact_df.iloc[1, 0] = numerator / denominator
-            if fact_devl_mth == fact_devl_mths[2]:
-                numerator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 2])
-                denominator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 1])
-                if denominator == 0:
-                    denominator = 1
-                fact_df.iloc[2, 0] = numerator / denominator
-                fact_df.iloc[1, 0] = fact_df.iloc[1, 0] * fact_df.iloc[2, 0]
+            reform_fact = []
+            for yr in reversed(clm_yrs):
+                reform_fact.append(claimtrend_dict['bi_reform'][f'{yr}'] or claimtrend_dict['cl_reform'][f'{yr}'])
 
-        cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost']
-        display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
-        display_yrs.reverse()
-        display_df = pd.DataFrame(columns=display_yrs, index=cols)
-        display_df_fmt = pd.DataFrame(columns=display_yrs, index=cols)
-        i = 0
-        est_values = dict()
-        for categ, row in display_df.iterrows():
-            if categ == 'Actual Paid':
-                for j in range(len(acc_yrs)):
-                    display_df.iloc[i, j] = df.iloc[min(j, len(devl_mths) - 1), len(acc_yrs) - j - 1]
-                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
-            elif categ == 'Devl Factor':
-                for k in range(len(acc_yrs)):
-                    if k < 2:
-                        display_df.iloc[i, k] = fact_df.iloc[k + 1].values[0]
-                    else:
-                        display_df.iloc[i, k] = 1
-                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
-            elif categ == 'Ultimate Incurred':
-                for l in range(len(acc_yrs)):
-                    display_df.iloc[i, l] = display_df.iloc[i - 2, l] * display_df.iloc[i - 1, l]
-                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
-            elif categ == 'In-Force':
-                for m in range(len(acc_yrs)):
-                    display_df.iloc[i, m] = financial_df.iloc[len(acc_yrs) - m - 1, 1]
-                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
-            elif categ == 'Loss Cost':
-                for n in range(len(acc_yrs)):
-                    denom = display_df.iloc[i - 1, n]
-                    if denom != 0:
-                        display_df.iloc[i, n] = decimal.Decimal(display_df.iloc[i - 2, n]) / denom
-                    else:
-                        display_df.iloc[i, n] = 0
-                lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
-                proj_lcost = perform_logistic_regression(max(clm_yrs) + 1, lcost)
-                est_values[i] = f'${proj_lcost[0]:,.2f}'
-                display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+            df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
+            for i, devl_mth in enumerate(devl_mths):
+                df.loc[devl_mth] = devl_data[i]
 
-        # Creating a DataFrame from the obtained data
+            transposed_df = df.T
 
-        all_data_years = copy.deepcopy(clm_yrs)  # Get all unique years
-        all_data_years.reverse()
+            fact_labels = ['Age-to-Age']
+            fact_devl_mths = copy.deepcopy(devl_mths)
+            fact_devl_mths[0] = None
+            fact_df = pd.DataFrame(columns=fact_labels, index=fact_devl_mths)
 
-        if selected_year not in unique_years:
-            selected_year = unique_years[0]
+            for i, fact_devl_mth in enumerate(fact_devl_mths):
+                if fact_devl_mth == fact_devl_mths[0]:
+                    fact_df.iloc[0, 0] = 0
+                if fact_devl_mth == fact_devl_mths[1]:
+                    numerator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 1])
+                    denominator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 0])
+                    if denominator == 0:
+                        denominator = 1
+                    fact_df.iloc[1, 0] = numerator / denominator
+                if fact_devl_mth == fact_devl_mths[2]:
+                    numerator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 2])
+                    denominator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 1])
+                    if denominator == 0:
+                        denominator = 1
+                    fact_df.iloc[2, 0] = numerator / denominator
+                    fact_df.iloc[1, 0] = fact_df.iloc[1, 0] * fact_df.iloc[2, 0]
 
-        financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
-                                                     index=True)
+            cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost', 'Trend Adj', 'Reform Adj', 'Weights',
+                    'Adj Loss Cost', 'Fixed Expenses', 'Expos Var Expenses', 'Prem Var Expenses']
+            display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
+            display_yrs.reverse()
+            display_df = pd.DataFrame(columns=display_yrs, index=cols)
+            display_df_fmt = pd.DataFrame(columns=display_yrs, index=cols)
+            i = 0
+            est_values = None
+            wtd_lcost = None
+            for categ, row in display_df.iterrows():
+                if categ == 'Actual Paid':
+                    for j in range(len(acc_yrs)):
+                        display_df.iloc[i, j] = df.iloc[min(j, len(devl_mths) - 1), len(acc_yrs) - j - 1]
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
+                elif categ == 'Devl Factor':
+                    for k in range(len(acc_yrs)):
+                        if k < 2:
+                            display_df.iloc[i, k] = fact_df.iloc[k + 1].values[0]
+                        else:
+                            display_df.iloc[i, k] = 1
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
+                elif categ == 'Ultimate Incurred':
+                    for l in range(len(acc_yrs)):
+                        display_df.iloc[i, l] = display_df.iloc[i - 2, l] * display_df.iloc[i - 1, l]
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
+                elif categ == 'In-Force':
+                    for m in range(len(acc_yrs)):
+                        display_df.iloc[i, m] = financial_df.iloc[len(acc_yrs) - m - 1, 1]
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
+                    in_force = display_df.iloc[i, 0]
+                elif categ == 'Loss Cost':
+                    for n in range(len(acc_yrs)):
+                        denom = display_df.iloc[i - 1, n]
+                        if denom != 0:
+                            display_df.iloc[i, n] = decimal.Decimal(display_df.iloc[i - 2, n]) / denom
+                        else:
+                            display_df.iloc[i, n] = 0
+                    lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
+                    est_values = perform_logistic_regression_indication(lcost, reform_fact)
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Trend Adj':
+                    for o in range(len(acc_yrs)):
+                        display_df.iloc[i, o] = est_values['trend'][o]
+                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
+                elif categ == 'Reform Adj':
+                    for p in range(len(acc_yrs)):
+                        display_df.iloc[i, p] = est_values['reform'][p]
+                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
+                elif categ == 'Weights':
+                    for q in range(len(acc_yrs)):
+                        display_df.iloc[i, q] = decimal.Decimal(wts[q])
+                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}%'.format(100 * x))
+                elif categ == 'Adj Loss Cost':
+                    for r in range(len(acc_yrs)):
+                        display_df.iloc[i, r] = decimal.Decimal(display_df.iloc[i-4, r]) * decimal.Decimal(display_df.iloc[i-3, r]) * decimal.Decimal(display_df.iloc[i-2, r])
+                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
 
+                    wtd_lcost = sum(display_df.iloc[i] * display_df.iloc[i-1])
+                    wtd_ind = i
+                elif categ == 'Fixed Expenses':
+                    for s in range(len(acc_yrs)):
+                        display_df.iloc[i, s] = 0
+                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Expos Var Expenses':
+                    for t in range(len(acc_yrs)):
+                        display_df.iloc[i, t] = 0
+                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Prem Var Expenses':
+                    for u in range(len(acc_yrs)):
+                        display_df.iloc[i, u] = 0
+                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+
+                i += 1
+            display_df_fmt.insert(0, f'Proj AY {max(clm_yrs) + 1}', '')
+            display_df_fmt.iloc[wtd_ind, 0] = f'${wtd_lcost:,.2f}'
+            if in_force != 0:
+                display_df_fmt.iloc[wtd_ind + 1, 0] = f'${round(fixed_exp/in_force,2):,.2f}'
+            else:
+                display_df_fmt.iloc[wtd_ind + 1, 0] = 0
+            display_df_fmt.iloc[wtd_ind + 2, 0] = f'${round(expos_var_cost, 2):,.2f}'
+            display_df_fmt.iloc[wtd_ind + 3, 0] = f'{round(prem_var_cost * 100, 1):,.1f}%'
+
+            index_list = [8, 12]  # insert blank rows
+
+            blank_row = pd.DataFrame([['' for _ in display_df_fmt.columns]], columns=display_df_fmt.columns)
+            for index in index_list:
+                display_df_fmt = pd.concat([display_df_fmt.iloc[:index], blank_row, display_df_fmt.iloc[index:]])
+                display_df_fmt.index = display_df_fmt.index.where(display_df_fmt.index != 0, ' ')
+
+            financial_data_table = display_df_fmt.to_html(classes='my-financial-table',
+                                                          border=0, justify='initial',
+                                                          index=True, escape=False)
+
+        else:
+            financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:
         financial_data_table = '<p>No financial data available.</p>'
 

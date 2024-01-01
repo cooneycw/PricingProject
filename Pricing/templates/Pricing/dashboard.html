@@ -19,7 +19,7 @@
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <h5 style="margin-bottom: 45px;">Decision Centre</h5>
+                                <h5 style="margin-bottom: 45px;">Performance Reports</h5>
                                     <div class="row"> <!-- Additional nested row for the images -->
                                         <div class="col-md-3 mb-3">
                                             <a href="{% url 'Pricing-mktgsales_report' game.game_id %}" class="report-icon" title="Marketing / Sales Report"><img src="{% static 'Pricing/001_advertising.png'  %}" alt="Marketing / Sales Report" width="80"></a>
@@ -45,6 +45,12 @@
                                         <div class="col-md-3 mb-3">
                                             <a href="{% url 'Pricing-decision_input' game.game_id %}" class="report-icon" title="Submit Decisions"><img src="{% static 'Pricing/008_decisions.png'  %}" alt="Decision Input" width="80"></a>
                                         </div>
+                                        {% if not decisions_frozen %}
+                                        <div class="col-md-12 mb-3" style="margin-top: 12px">
+                                            <div style="color:#000000; font-size: 18px; font-family: 'Roboto Mono'">Enter decisions within:</div>
+                                            <div id="countdown" style="color:#ff0000; font-size: 18px; font-family: 'Roboto Mono'"> Loading...</div>
+                                        </div>
+                                        {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -56,6 +62,28 @@
     <!-- JavaScript to enable AJAX-based chat -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
+    {% if not decisions_frozen %}
+    var isoDateTimeStringT = "{{ target_datetime }}";
+    var targetDate = new Date(isoDateTimeStringT);
+    targetDate.setUTCHours(targetDate.getUTCHours() - 0);
+    var countdownInterval = setInterval(function() {
+    var currentDate = new Date();
+    var timeRemaining = targetDate - currentDate;
+    if (timeRemaining <= 0) {
+      clearInterval(countdownInterval);
+      document.getElementById("countdown").innerHTML = "Time expired...";
+    } else {
+      var minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+      var seconds = Math.floor((timeRemaining % (1000 * 60)) / 1000);
+
+      var formattedMinutes = minutes.toString().padStart(2, '0');
+      var formattedSeconds = seconds.toString().padStart(2, '0');
+
+      document.getElementById("countdown").innerHTML = formattedMinutes + ":" + formattedSeconds + "s";
+    }
+    }, 1000); // Update every second (1000 milliseconds)
+    {% endif %}
+
     const greenList = {{ green_list | safe }};
         $(document).ready(function() {
             const gameId = "{{ game.game_id }}";  // You can pass game_id through the Django context
@@ -101,6 +129,7 @@
 
                             if (message.from_sender === "game_server" && message.content === "Review decisions.") {
                                 rowClass += ' game-server special-message';
+                                location.reload();
                             } else if (message.from_sender === "game_server") {
                                 let isGreenMessage = false;
 

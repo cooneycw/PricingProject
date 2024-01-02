@@ -62,6 +62,7 @@
     <!-- JavaScript to enable AJAX-based chat -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
+    var lastReviewCnt = null;
     {% if not decisions_frozen %}
     var isoDateTimeStringT = "{{ target_datetime }}";
     var targetDate = new Date(isoDateTimeStringT);
@@ -109,7 +110,9 @@
                 success: function(data) {
                     // No need to append the message to the chat log
                     $('#chat-message-input').val(''); // Clear the input
-                }
+
+                    // Update the timer visibility based on review_cnt and decisions_frozen
+                        }
             });
         });
 
@@ -123,6 +126,16 @@
                     },
                     success: function(data) {
                         $('#chat-log').html('');
+                   console.log("lastReviewCnt:", lastReviewCnt);
+                    console.log("data.review_cnt:", data.review_cnt)
+                    if (lastReviewCnt === null) {
+                        lastReviewCnt = data.review_cnt;
+                }
+                    if (data.review_cnt > lastReviewCnt ) {
+                location.reload(true);
+            } else if (data.review_cnt === lastReviewCnt) {
+                // Keep current state of the timer
+            }
                         data.messages.forEach(function(message) {
                             let row = `${message.from_sender} ${message.time}: ${message.content}`;
                             let rowClass = 'chat-row';

@@ -1824,13 +1824,16 @@ def fetch_messages(request):
         messages = ChatMessage.objects.filter(
             game_id=game_id,
             sequence_number__gt=latest_sequence
-        ).order_by('sequence_number')[:50]
+        ).order_by('sequence_number')
 
         message_list = []
+        review_cnt = 0
         for msg in messages:
             # Perform timezone conversion to Django's default timezone
             timestamp_with_timezone = timezone.localtime(msg.timestamp)
             from_sender = msg.from_user.username if msg.from_user else "game_server"
+            if msg.content == 'Review decisions.' and from_sender == 'game_server':
+                review_cnt += 1
             message_list.append({
                 'from_sender': from_sender,
                 'time': timestamp_with_timezone.strftime('%H:%M:%S'),
@@ -1838,4 +1841,6 @@ def fetch_messages(request):
                 'sequence_number': msg.sequence_number
             })
 
-        return JsonResponse({"messages": message_list})
+        message_list = message_list[-50:]
+
+        return JsonResponse({"messages": message_list, "review_cnt": review_cnt})

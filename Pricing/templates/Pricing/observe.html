@@ -12,13 +12,13 @@
                         <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Refresh Listing" value="Refresh Listing"></input>
                     </form>
                 </div>
-                <div class="block-heading" style="text-align: left">
-                    <h3>Click to Observe Game:</h3>
+                <div class="container" style="text-align: left; font-family: 'Roboto Mono'">
+                    <h3 style="font-family: 'Montserrat'">Click to Observe Game:</h3>
                     <ul id="accessible-games-list">
                         {% for game in accessible_games %}
                             <li>
                                 <a href="{% url 'Pricing-game_dashboard' game_id=game.game_id %}">
-                                    {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.initiator }} - {{ game.game_type }}
+                                    {{ game.timestamp|date:"Y-m-d H:i:s"  }} - {{ game.status }} - {{ game.initiator }} - {{ game.game_type }}
                                 </a>
                             </li>
                             {% empty %}

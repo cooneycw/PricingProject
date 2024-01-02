@@ -145,6 +145,8 @@ class Decisions(models.Model):
     decisions_locked = models.BooleanField(default=False)
     decisions_game_stage = models.CharField(max_length=128, null=True, blank=True)
     decisions_time_stamp = models.JSONField()
+    curr_avg_prem = models.DecimalField(max_digits=18, decimal_places=2)
+    server_indic_avg_prem = models.DecimalField(max_digits=18, decimal_places=2)
 
 
 class ChatMessage(models.Model):

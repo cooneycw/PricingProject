@@ -1633,7 +1633,7 @@ def decision_input(request, game_id):
         financial_data_list = list(financial_data.values('year', 'in_force'))
         financial_df = pd.DataFrame(financial_data_list)
         if not financial_df.empty:
-            indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']['indication_data']
+            indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']
             devl_data = indication_data_dict['devl_data']
             wts = indication_data_dict['indic_wts']
             fixed_exp = decimal.Decimal(indication_data_dict['fixed_exp'])

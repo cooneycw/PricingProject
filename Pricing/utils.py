@@ -97,7 +97,7 @@ def perform_logistic_regression(data, reform_fact):
         return reform, est, ret_preds
 
 
-def perform_logistic_regression_indication(data, reform_fact):
+def perform_logistic_regression_indication(data, reform_fact, sel_loss_cost_margin):
     df = pd.DataFrame(data, columns=['Year', 'Value'])
     df['Ln_Value'] = np.log(df['Value'])
     proj_year = max(df['Year'].values) + 1
@@ -125,6 +125,7 @@ def perform_logistic_regression_indication(data, reform_fact):
 
     model = LinearRegression(fit_intercept=True)
     model.fit(X, y)
+    exp_list = [(1 + .01 * int(sel_loss_cost_margin)) ** (1 + max(acc_yrs) - yr) for yr in acc_yrs]
 
     if reform:
         pred_df = df.drop(columns=['Ln_Value', 'Value'])
@@ -143,11 +144,12 @@ def perform_logistic_regression_indication(data, reform_fact):
 
         keys = ['trend', 'reform']
 
+
         for key in keys:
             est[key] = list()
             if key == 'trend':
                 numer = pred_out[2]['predicted_value'][0]
-            for acc_yr in acc_yrs:
+            for q, acc_yr in enumerate(acc_yrs):
                 if key == 'trend':
                     denom = pred_out[0][pred_out[0]['Year'] == acc_yr]['predicted_value'].values[0]
                 elif key == 'reform':
@@ -158,7 +160,7 @@ def perform_logistic_regression_indication(data, reform_fact):
                         numer = pred_out[0][pred_out[1]['Year'] == acc_yr]['predicted_value'].values[0]
                         denom = pred_out[1][pred_out[1]['Year'] == acc_yr]['predicted_value'].values[0]
                 if denom != 0:
-                    est[key].append(numer/denom)
+                    est[key].append(numer/denom * exp_list[q])
                 else:
                     est[key].append(0)
         return est
@@ -179,11 +181,11 @@ def perform_logistic_regression_indication(data, reform_fact):
             est[key] = list()
             if key == 'trend':
                 numer = pred_out[1]['predicted_value'][0]
-            for acc_yr in acc_yrs:
+            for q, acc_yr in enumerate(acc_yrs):
                 if key == 'trend':
                     denom = pred_out[0][pred_out[0]['Year'] == acc_yr]['predicted_value'].values[0]
                 if denom != 0:
-                    est[key].append(numer/denom)
+                    est[key].append(numer/denom * exp_list[q])
                 else:
                     est[key].append(0)
 

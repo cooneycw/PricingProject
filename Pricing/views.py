@@ -1619,8 +1619,21 @@ def decision_input(request, game_id):
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
+    selected_year = None
+    sel_profit_margin = None
+    froze_lock = False
+
     selected_year = request.POST.get('year')  # Get the selected year from the query parameters
     selected_year = int(selected_year) if selected_year else None
+
+    sel_profit_margin = request.POST.get('profit')
+    sel_profit_margin = int(sel_profit_margin) if sel_profit_margin else None
+
+    sel_mktg_expense = request.POST.get('mktg')
+    sel_mktg_expense = int(sel_mktg_expense) if sel_mktg_expense else None
+
+    sel_loss_margin = request.POST.get('loss')
+    sel_loss_margin = int(sel_loss_margin) if sel_loss_margin else None
 
     template_name = 'Pricing/decision_input.html'
 
@@ -1630,7 +1643,14 @@ def decision_input(request, game_id):
 
     unique_years = indication_obj.order_by('-year').values_list('year', flat=True).distinct()
     if unique_years:  # Proceed if there are any financial years available
-        financial_data_list = list(financial_data.values('year', 'in_force'))
+
+        # coverages = ['Bodily Injury', 'Collision', 'Total']
+        # for count_id, coverage in enumerate(coverages):
+        #    coverage_list.append(coverage)
+        #    coverage_id_list.append(count_id)
+        # coverage_options = list(zip(coverage_id_list, coverage_list))
+
+        financial_data_list = list(financial_data.values('year', 'in_force', 'written_premium'))
         financial_df = pd.DataFrame(financial_data_list)
         if not financial_df.empty:
             indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']
@@ -1639,9 +1659,18 @@ def decision_input(request, game_id):
             fixed_exp = decimal.Decimal(indication_data_dict['fixed_exp'])
             prem_var_cost = decimal.Decimal(indication_data_dict['prem_var_cost'])
             expos_var_cost = decimal.Decimal(indication_data_dict['expos_var_cost'])
-            mct_capital_reqd = decimal.Decimal(indication_data_dict['mct_capital_reqd'])
+            mct_ratio = decimal.Decimal(indication_data_dict['mct_ratio'])
+            mct_capital_reqd = indication_data_dict['mct_capital_reqd']
             pass_capital_test = indication_data_dict['pass_capital_test']
-            capital = decimal.Decimal(indication_data_dict['capital'])
+            # pass_capital_test = 'Fail'
+            mct_label = f'MCT Ratio (Target @ {100*mct_capital_reqd:,.1f}%):'
+            if pass_capital_test == 'Pass':
+                mct_pass = '<span class="green-text"><b>' + pass_capital_test + '</b></span>'
+                osfi_alert = False
+            else:
+                mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
+                osfi_alert = True
+                froze_lock = True
             clm_yrs = indication_data_dict['acc_yrs']
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
             devl_mths = indication_data_dict['devl_mths']
@@ -1651,6 +1680,42 @@ def decision_input(request, game_id):
 
             if selected_year not in unique_years:
                 selected_year = unique_years[0]
+
+            decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year)
+            decision_data_list = list(decision_obj.values('year', 'sel_profit_margin', 'sel_profit_margin_min', 'sel_profit_margin_max',
+                                    'sel_exp_ratio_mktg', 'sel_exp_ratio_mktg_min', 'sel_exp_ratio_mktg_max',
+                                    'sel_loss_trend_margin', 'sel_loss_trend_margin_min', 'sel_loss_trend_margin_max',
+                                    'decisions_locked'))[0]
+
+            decision_obj_last = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year-1)
+            decision_data_last_list = list(decision_obj_last.values('year', 'sel_profit_margin',
+                                    'sel_exp_ratio_mktg',
+                                    'sel_loss_trend_margin', ))[0]
+
+            if decision_data_list['decisions_locked'] == True:
+                froze_lock = True
+
+            profit_margins = [f'{x}' for x in range(decision_data_list['sel_profit_margin_min'],
+                                               1 + decision_data_list['sel_profit_margin_max'])]
+
+            mktg_expenses = [f'{x}' for x in range(decision_data_list['sel_exp_ratio_mktg_min'],
+                             1 + decision_data_list['sel_exp_ratio_mktg_max'])]
+
+            loss_margins = [f'{x}' for x in range(decision_data_list['sel_loss_trend_margin_min'],
+                                                   1 + decision_data_list['sel_loss_trend_margin_max'])]
+
+            last_profit_margin = decision_data_last_list.get('sel_profit_margin', None)
+            last_mktg_expense = decision_data_last_list.get('sel_exp_ratio_mktg', None)
+            last_loss_margin = decision_data_last_list.get('sel_loss_trend_margin', None)
+
+            if last_profit_margin is not None and sel_profit_margin is None:
+                sel_profit_margin = f'{last_profit_margin}'
+
+            if last_mktg_expense is not None and sel_mktg_expense is None:
+                sel_mktg_expense = f'{last_mktg_expense}'
+
+            if last_loss_margin is not None and sel_loss_margin is None:
+                sel_loss_margin = f'{last_loss_margin}'
 
             claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
             if claimtrend_obj:
@@ -1689,7 +1754,8 @@ def decision_input(request, game_id):
                     fact_df.iloc[1, 0] = fact_df.iloc[1, 0] * fact_df.iloc[2, 0]
 
             cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost', 'Trend Adj', 'Reform Adj', 'Weights',
-                    'Adj Loss Cost', 'Fixed Expenses', 'Expos Var Expenses', 'Prem Var Expenses']
+                    'Adj Loss Cost', 'Fixed Expenses', 'Expos Var Expenses', 'Prem Var Expenses', 'Marketing Expenses', 'Profit Margin',
+                    'Current Premium', 'Indicated Premium', 'Rate Change']
             display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
             display_yrs.reverse()
             display_df = pd.DataFrame(columns=display_yrs, index=cols)
@@ -1726,51 +1792,94 @@ def decision_input(request, game_id):
                         else:
                             display_df.iloc[i, n] = 0
                     lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
-                    est_values = perform_logistic_regression_indication(lcost, reform_fact)
+                    est_values = perform_logistic_regression_indication(lcost, reform_fact, sel_loss_margin)
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 elif categ == 'Trend Adj':
                     for o in range(len(acc_yrs)):
                         display_df.iloc[i, o] = est_values['trend'][o]
-                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
+                        if int(sel_loss_margin) > 0:
+                            prefix = '<span class="blue-text">'
+                            postfix = '</span>'
+                        elif int(sel_loss_margin) < 0:
+                            prefix = '<span class="red-text">'
+                            postfix = '</span>'
+                        else:
+                            prefix = ''
+                            postfix = ''
+                    display_df_fmt.iloc[i] = prefix + display_df.iloc[i].map(lambda x: '' if x == 0 else prefix + '{:,.3f}'.format(x) + postfix)
                 elif categ == 'Reform Adj':
                     for p in range(len(acc_yrs)):
                         display_df.iloc[i, p] = est_values['reform'][p]
-                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.3f}'.format(x))
                 elif categ == 'Weights':
                     for q in range(len(acc_yrs)):
                         display_df.iloc[i, q] = decimal.Decimal(wts[q])
-                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}%'.format(100 * x))
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}%'.format(100 * x))
                 elif categ == 'Adj Loss Cost':
                     for r in range(len(acc_yrs)):
                         display_df.iloc[i, r] = decimal.Decimal(display_df.iloc[i-4, r]) * decimal.Decimal(display_df.iloc[i-3, r]) * decimal.Decimal(display_df.iloc[i-2, r])
-                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
 
                     wtd_lcost = sum(display_df.iloc[i] * display_df.iloc[i-1])
                     wtd_ind = i
                 elif categ == 'Fixed Expenses':
                     for s in range(len(acc_yrs)):
                         display_df.iloc[i, s] = 0
-                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 elif categ == 'Expos Var Expenses':
                     for t in range(len(acc_yrs)):
                         display_df.iloc[i, t] = 0
-                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 elif categ == 'Prem Var Expenses':
                     for u in range(len(acc_yrs)):
                         display_df.iloc[i, u] = 0
-                        display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
-
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Marketing Expenses':
+                    for v in range(len(acc_yrs)):
+                        display_df.iloc[i, v] = 0
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Profit Margin':
+                    for w in range(len(acc_yrs)):
+                        display_df.iloc[i, w] = 0
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Indicated Premium':
+                    for x in range(len(acc_yrs)):
+                        display_df.iloc[i, x] = 0
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Current Premium':
+                    for y in range(len(acc_yrs)):
+                        display_df.iloc[i, y] = 0
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
+                elif categ == 'Rate Change':
+                    for z in range(len(acc_yrs)):
+                        display_df.iloc[i, z] = 0
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 i += 1
             display_df_fmt.insert(0, f'Proj AY {max(clm_yrs) + 1}', '')
             display_df_fmt.iloc[wtd_ind, 0] = f'${wtd_lcost:,.2f}'
             if in_force != 0:
+                fixed_cost = fixed_exp / in_force
                 display_df_fmt.iloc[wtd_ind + 1, 0] = f'${round(fixed_exp/in_force,2):,.2f}'
+                current_prem = round(financial_df.iloc[len(acc_yrs) - 1]['written_premium'] / in_force, 2)
             else:
                 display_df_fmt.iloc[wtd_ind + 1, 0] = 0
+                current_prem = 0
             display_df_fmt.iloc[wtd_ind + 2, 0] = f'${round(expos_var_cost, 2):,.2f}'
             display_df_fmt.iloc[wtd_ind + 3, 0] = f'{round(prem_var_cost * 100, 1):,.1f}%'
+            display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(sel_mktg_expense), 1):,.1f}%'
+            display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(sel_profit_margin), 1):,.1f}%'
+            indicated_prem = round((wtd_lcost + expos_var_cost + fixed_cost) / (1 - (expos_var_cost / 100) -
+                                                                          (decimal.Decimal(int(sel_mktg_expense)) / 100) -
+                                                                          (decimal.Decimal(int(sel_profit_margin)) / 100)), 2)
+            display_df_fmt.iloc[wtd_ind + 6, 0] = f'${current_prem:,.2f}'
+            if current_prem != 0:
+                rate_chg = indicated_prem / current_prem - 1
+            else:
+                rate_chg = 0
+            display_df_fmt.iloc[wtd_ind + 7, 0] = f'${indicated_prem:,.2f}'
+            display_df_fmt.iloc[wtd_ind + 8, 0] = f'{round(100 * rate_chg, 1):,.1f}%'
 
-            index_list = [8, 12]  # insert blank rows
+            index_list = [8, 12, 16, 19]  # insert blank rows
 
             blank_row = pd.DataFrame([['' for _ in display_df_fmt.columns]], columns=display_df_fmt.columns)
             for index in index_list:
@@ -1786,6 +1895,7 @@ def decision_input(request, game_id):
     else:
         financial_data_table = '<p>No financial data available.</p>'
 
+
     context = {
         'title': ' - Indication / Decisions',
         'game': game,
@@ -1793,6 +1903,20 @@ def decision_input(request, game_id):
         'has_financial_data': indication_obj.exists(),
         'unique_years': unique_years,
         'selected_year': selected_year,
+        'mct_label': mct_label,
+        'mct_ratio': f'{round(100 * mct_ratio, 1)}%',
+        'mct_pass': mct_pass,
+        'profit_margins': profit_margins,
+        'sel_profit_margin': f'{sel_profit_margin}',
+        'mktg_expenses': mktg_expenses,
+        'sel_mktg_expense': f'{sel_mktg_expense}',
+        'loss_margins': loss_margins,
+        'sel_loss_margin': f'{sel_loss_margin}',
+        'froze_lock': froze_lock,
+        'osfi_alert': osfi_alert,
+        'current_prem': f'${current_prem:,.2f}',
+        'indicated_prem': f'${indicated_prem:,.2f}',
+        'rate_chg': f'<span class="violet-text">{round(100 * rate_chg,1):,.1f}% </span>',
     }
     return render(request, template_name, context)
 

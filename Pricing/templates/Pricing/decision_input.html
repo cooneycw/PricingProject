@@ -17,15 +17,83 @@
                         <div class="row">
                             <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
                                 <h5>Indication Centre</h5>
-                                <div class="block-heading" style="text-align:left; border: 3px solid #2196f3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                <div class="block-heading" style="font-family: 'Roboto Mono'; text-align:left; border: 3px solid #2196f3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                     <!-- Insert Reports -->
-
+                                    <div class="indic">
+                                        <label for="regulatory" style="margin-right: 120px;">{{ mct_label }}</label>
+                                        <span>{{ mct_ratio }}</span>
+                                    </div>
+                                    <div class="indic">
+                                        <label for="regul_pass" style="margin-right: 42px;">Pass Capital Test:</label>
+                                        <span>{{ mct_pass | safe}}</span>
+                                    </div>
+                                    <div class="indic">
+                                        <label for="curr_prem" style="margin-right: 60px;">Current Premium:</label>
+                                        <span>{{ current_prem | safe}}</span>
+                                    </div>
+                                    <div class="indic">
+                                        <label for="indic_prem" style="margin-right: 41px;">Indicated Premium:</label>
+                                        <span>{{ indicated_prem | safe}}</span>
+                                    </div>
+                                    <div class="indic">
+                                        <label for="rate_chg" style="margin-right: 15px;">Proposed Rate Change:</label>
+                                        <span>{{ rate_chg | safe}}</span>
+                                    </div>
                                 </div>
                             </div>
                             <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
-                                <h5>Decision Centre</h5>
-                                <div class="block-heading" style="text-align:left; border: 3px solid #2196F3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                <h5>Decision Centre {% if osfi_alert %}(disabled due to regulatory intervention){% endif %}</h5>
+                                {% if not osfi_alert %}
+                                    <div class="block-heading" style="font-family: 'Roboto Mono'; text-align:left; border: 3px solid #2196F3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                {% endif %}
+                                {% if osfi_alert %}
+                                    <div class="block-heading" style="text-align:left; border: 3px solid #ff0000; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                {% endif %}
                                     <!-- Insert Reports -->
+                                    <form method="POST" action="">
+                                        {% csrf_token %}
+                                        <div class="decis">
+                                            <label for="profit">Selected Profit Margin (%):</label>
+                                            <div class="select-wrapper">
+                                                <select id="profit" name="profit" {% if froze_lock %}disabled{% endif %}>
+                                                {% for profit_margin in profit_margins %}
+                                                    <option value="{{ profit_margin }}" {% if sel_profit_margin == profit_margin %}selected{% endif %}>{{ profit_margin }}</option>
+                                                {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="decis">
+                                            <label for="mktg" style="margin-right: 10px;">Selected Marketing Expense (%):</label>
+                                            <div class="select-wrapper">
+                                                <select id="mktg" name="mktg" {% if froze_lock %}disabled{% endif %}>
+                                                {% for mktg_expense in mktg_expenses %}
+                                                    <option value="{{ mktg_expense }}" {% if sel_mktg_expense == mktg_expense %}selected{% endif %}>{{ mktg_expense }}</option>
+                                                {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="decis">
+                                            <label for="loss" style="margin-right: 18px;">Selected Loss Trend Margin (%):</label>
+                                            <div class="select-wrapper">
+                                                <select id="loss" name="loss" {% if froze_lock %}disabled{% endif %}>
+                                                {% for loss_margin in loss_margins %}
+                                                    <option value="{{ loss_margin }}" {% if sel_loss_margin == loss_margin %}selected{% endif %}>{{ loss_margin }}</option>
+                                                {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <br/>
+                                        </div>
+                                        <div>
+                                            <input type="submit" name="Recalculate" value="Recalculate" style="margin-right: 10px;">
+                                            <input type="submit" name="Submit" value="Submit">
+                                        </div>
+
+                                    </form>
+                                </div>
+
 
                                 </div>
                             </div>
@@ -42,7 +110,8 @@
                 {% if has_financial_data %}
                     <div class="block-heading" style="text-align: left; margin-top: 2px; "> <!-- Added some top margin -->
                         <div style="padding-left: 20px;  margin-bottom: 20px;"> <!-- Wrapper with padding for whitespace -->
-                            <form method="GET" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
+                            <form method="POST" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
+                                {% csrf_token %}
                                 <div style="margin-right: 15px; width: 300px;"> <!-- Constrained width for the question text -->
                                     <label for="year">Latest Indication / Decision Year for Display:</label>
                                 </div>
@@ -89,5 +158,40 @@
         });
     });
 </script>
+<style>
+    .green-text {
+        color: green;
+    }
+    .red-text {
+        color: red;
+    }
+    .violet-text {
+        color: mediumvioletred;
+    }
+    .blue-text {
+        color: blue;
+    }
+    .indic {
+    display: flex;
+    justify-content: space-between;
+    padding-right: 20%; /* Adjust as needed */
+    }
+    .decis {
+    display: flex;
+    justify-content: space-between;
+    padding-right: 20%; /* Adjust as needed */
+    }
+    .select-wrapper {
+    text-align: right;
+    padding-right: 15%;
+    }
+    .in-line {
+        white-space: nowrap; /* Prevent line breaks */
+        display: inline-block; /* Display as an inline block */
+    }
+    h6 {
+         display: inline; /* Display the <h6> elements inline */
 
+    }
+    </style>
 {% endblock content %}

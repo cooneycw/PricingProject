@@ -15,6 +15,7 @@ urlpatterns = [
     path('financials_report/<str:game_id>/', views.financials_report, name='Pricing-financials_report'),
     path('valuation_report/<str:game_id>/', views.valuation_report, name='Pricing-valuation_report'),
     path('decision_input/<str:game_id>/', views.decision_input, name='Pricing-decision_input'),
+    path('decision_confirm/<str:game_id>/', views.decision_confirm, name='Pricing-decision_confirm'),
     path('join_group_game/<str:game_id>/', views.join_group_game, name='Pricing-join_group_game'),
     path('observe/', views.observe, name='Pricing-observe'),
     path('send_message/', views.send_message, name='send_message'),

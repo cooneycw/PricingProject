@@ -87,8 +87,8 @@
                                             <br/>
                                         </div>
                                         <div>
-                                            <input type="submit" name="Recalculate" value="Recalculate" style="margin-right: 10px;" {% if decisions_locked %}disabled {% endif %}>
-                                            <input type="submit" name="Submit" value="Submit" {% if decisions_locked %}disabled {% endif %}>
+                                            <input type="submit" name="Return to Indication" value="Return to Indication" style="margin-right: 10px;">
+                                            <input type="submit" name="Confirm Decisions" value="Confirm Decisions">
                                         </div>
 
                                     </form>
@@ -100,65 +100,9 @@
                         </div>
                     </div>
             </div>
-            <div class="container">
-
-                {% if not has_financial_data %}
-                    <div class="block-heading" style="text-align: left">
-                        <p>Indication data processing not yet complete.  Please await notification in the Message Centre.</p>
-                    </div>
-                {% endif %}
-                {% if has_financial_data %}
-                    <div class="block-heading" style="text-align: left; margin-top: 2px; "> <!-- Added some top margin -->
-                        <div style="padding-left: 20px;  margin-bottom: 20px;"> <!-- Wrapper with padding for whitespace -->
-                            <form method="POST" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
-                                {% csrf_token %}
-                                <div style="margin-right: 15px; width: 300px;"> <!-- Constrained width for the question text -->
-                                    <label for="year">Latest Indication / Decision Year for Display:</label>
-                                </div>
-                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
-                                    <select id="year" name="year">
-                                        {% for year in unique_years %}
-                                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <input type="submit" value="Select">
-                            </form>
-                            <hr>
-                            <div class="financial-data-table">
-                                {{ financial_data_table|safe }}
-                            </div>
-                        </div>
-                    </div>
-                {% endif %}
-            </div>
         </section>
     </main>
- <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Select all table rows within the financial-data-table
-        var tableRows = document.querySelectorAll('.financial-data-table tr');
-
-        // Loop through each table row
-        tableRows.forEach(function(row) {
-            // Select all th and td elements in the current row
-            var cells = row.querySelectorAll('th, td');
-
-            // Loop through each cell
-            cells.forEach(function(cell) {
-                // Check if the cell is empty
-                if(cell.innerHTML.trim() === '') {
-                    // If empty, insert a non-breaking space character
-                    cell.innerHTML = '&nbsp;';
-                }
-
-                // Apply the monospaced font to each cell
-                cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
-            });
-        });
-    });
-</script>
-<style>
+ <style>
     .green-text {
         color: green;
     }

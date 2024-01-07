@@ -408,7 +408,6 @@ def game_dashboard(request, game_id):
         df = pd.DataFrame(decisions_data_list)
 
         if not df.empty:
-            print(f'df not empty. latest_year: {latest_year}')
             # Filter out only the rows belonging to the latest four years
             latest_df = df[df['year'] == latest_year]
 
@@ -1622,6 +1621,7 @@ def decision_input(request, game_id):
     selected_year = None
     sel_profit_margin = None
     froze_lock = False
+    decisions_locked = False
 
     selected_year = request.POST.get('year')  # Get the selected year from the query parameters
     selected_year = int(selected_year) if selected_year else None
@@ -1662,15 +1662,8 @@ def decision_input(request, game_id):
             mct_ratio = decimal.Decimal(indication_data_dict['mct_ratio'])
             mct_capital_reqd = indication_data_dict['mct_capital_reqd']
             pass_capital_test = indication_data_dict['pass_capital_test']
-            # pass_capital_test = 'Fail'
             mct_label = f'MCT Ratio (Target @ {100*mct_capital_reqd:,.1f}%):'
-            if pass_capital_test == 'Pass':
-                mct_pass = '<span class="green-text"><b>' + pass_capital_test + '</b></span>'
-                osfi_alert = False
-            else:
-                mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
-                osfi_alert = True
-                froze_lock = True
+
             clm_yrs = indication_data_dict['acc_yrs']
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
             devl_mths = indication_data_dict['devl_mths']
@@ -1681,32 +1674,36 @@ def decision_input(request, game_id):
             if selected_year not in unique_years:
                 selected_year = unique_years[0]
 
-            decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year)
-            decision_data_list = list(decision_obj.values('year', 'sel_profit_margin', 'sel_profit_margin_min', 'sel_profit_margin_max',
-                                    'sel_exp_ratio_mktg', 'sel_exp_ratio_mktg_min', 'sel_exp_ratio_mktg_max',
-                                    'sel_loss_trend_margin', 'sel_loss_trend_margin_min', 'sel_loss_trend_margin_max',
-                                    'decisions_locked'))[0]
+            decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year).first()
+            decision_obj_last = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year-1).first()
 
-            decision_obj_last = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year-1)
-            decision_data_last_list = list(decision_obj_last.values('year', 'sel_profit_margin',
-                                    'sel_exp_ratio_mktg',
-                                    'sel_loss_trend_margin', ))[0]
-
-            if decision_data_list['decisions_locked'] == True:
+            if decision_obj.decisions_locked == True:
                 froze_lock = True
+                decisions_locked = True
 
-            profit_margins = [f'{x}' for x in range(decision_data_list['sel_profit_margin_min'],
-                                               1 + decision_data_list['sel_profit_margin_max'])]
+            profit_margins = [f'{x}' for x in range(decision_obj.sel_profit_margin_min,
+                                               1 + decision_obj.sel_profit_margin_max)]
 
-            mktg_expenses = [f'{x}' for x in range(decision_data_list['sel_exp_ratio_mktg_min'],
-                             1 + decision_data_list['sel_exp_ratio_mktg_max'])]
+            mktg_expenses = [f'{x}' for x in range(decision_obj.sel_exp_ratio_mktg_min,
+                             1 + decision_obj.sel_exp_ratio_mktg_max)]
 
-            loss_margins = [f'{x}' for x in range(decision_data_list['sel_loss_trend_margin_min'],
-                                                   1 + decision_data_list['sel_loss_trend_margin_max'])]
+            loss_margins = [f'{x}' for x in range(decision_obj.sel_loss_trend_margin_min,
+                                                   1 + decision_obj.sel_loss_trend_margin_max)]
 
-            last_profit_margin = decision_data_last_list.get('sel_profit_margin', None)
-            last_mktg_expense = decision_data_last_list.get('sel_exp_ratio_mktg', None)
-            last_loss_margin = decision_data_last_list.get('sel_loss_trend_margin', None)
+            ret_from_confirm = request.session.get('ret_from_confirm', False)
+            if ret_from_confirm is True or decisions_locked is True:
+                last_profit_margin = decision_obj.sel_profit_margin
+                last_mktg_expense = decision_obj.sel_exp_ratio_mktg
+                last_loss_margin = decision_obj.sel_loss_trend_margin
+                request.session['ret_from_confirm'] = False
+            elif decision_obj_last:
+                last_profit_margin = decision_obj_last.sel_profit_margin
+                last_mktg_expense = decision_obj_last.sel_exp_ratio_mktg
+                last_loss_margin = decision_obj_last.sel_loss_trend_margin
+            else:
+                last_profit_margin = None
+                last_mktg_expense = None
+                last_loss_margin = None
 
             if last_profit_margin is not None and sel_profit_margin is None:
                 sel_profit_margin = f'{last_profit_margin}'
@@ -1716,6 +1713,18 @@ def decision_input(request, game_id):
 
             if last_loss_margin is not None and sel_loss_margin is None:
                 sel_loss_margin = f'{last_loss_margin}'
+
+            # pass_capital_test = 'Fail'
+            if pass_capital_test == 'Pass':
+                mct_pass = '<span class="green-text"><b>' + pass_capital_test + '</b></span>'
+                osfi_alert = False
+            else:
+                mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
+                sel_profit_margin = '7'
+                sel_mktg_expense = '0'
+                sel_loss_margin = '2'
+                osfi_alert = True
+                froze_lock = True
 
             claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
             if claimtrend_obj:
@@ -1860,7 +1869,7 @@ def decision_input(request, game_id):
             if in_force != 0:
                 fixed_cost = fixed_exp / in_force
                 display_df_fmt.iloc[wtd_ind + 1, 0] = f'${round(fixed_exp/in_force,2):,.2f}'
-                current_prem = round(financial_df.iloc[len(acc_yrs) - 1]['written_premium'] / in_force, 2)
+                current_prem = float(round(financial_df.iloc[len(acc_yrs) - 1]['written_premium'] / in_force, 2))
             else:
                 display_df_fmt.iloc[wtd_ind + 1, 0] = 0
                 current_prem = 0
@@ -1868,9 +1877,22 @@ def decision_input(request, game_id):
             display_df_fmt.iloc[wtd_ind + 3, 0] = f'{round(prem_var_cost * 100, 1):,.1f}%'
             display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(sel_mktg_expense), 1):,.1f}%'
             display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(sel_profit_margin), 1):,.1f}%'
-            indicated_prem = round((wtd_lcost + expos_var_cost + fixed_cost) / (1 - (expos_var_cost / 100) -
-                                                                          (decimal.Decimal(int(sel_mktg_expense)) / 100) -
-                                                                          (decimal.Decimal(int(sel_profit_margin)) / 100)), 2)
+            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - (expos_var_cost / 100) - (decimal.Decimal(int(sel_mktg_expense)) / 100) -
+                                                                          (decimal.Decimal(int(sel_profit_margin)) / 100))), 2))
+            if request.POST.get('Submit') == 'Submit':
+                test_prem = request.session.get('indicated_prem', 0)
+                if test_prem != indicated_prem:
+                    messages.warning(request, "Premium re-calculated due to changed parameters.  Please review and submit again.")
+                else:
+                    decision_obj.sel_profit_margin = int(sel_profit_margin)
+                    decision_obj.sel_exp_ratio_mktg = int(sel_mktg_expense)
+                    decision_obj.sel_loss_trend_margin = int(sel_loss_margin)
+                    decision_obj.sel_avg_prem = indicated_prem
+                    decision_obj.save()
+                    request.session['indicated_prem'] = indicated_prem
+                    request.session['selected_year'] = selected_year
+                    return redirect('Pricing-decision_confirm', game_id=game_id)
+            request.session['indicated_prem'] = indicated_prem
             display_df_fmt.iloc[wtd_ind + 6, 0] = f'${current_prem:,.2f}'
             if current_prem != 0:
                 rate_chg = indicated_prem / current_prem - 1
@@ -1914,10 +1936,43 @@ def decision_input(request, game_id):
         'sel_loss_margin': f'{sel_loss_margin}',
         'froze_lock': froze_lock,
         'osfi_alert': osfi_alert,
+        'decisions_locked': decisions_locked,
         'current_prem': f'${current_prem:,.2f}',
         'indicated_prem': f'${indicated_prem:,.2f}',
         'rate_chg': f'<span class="violet-text">{round(100 * rate_chg,1):,.1f}% </span>',
     }
+    return render(request, template_name, context)
+
+
+@login_required
+def decision_confirm(request, game_id):
+    user = request.user
+    game = get_object_or_404(IndivGames,
+                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    selected_year = request.session.get('selected_year', 0)
+    decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year).first()
+
+    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    if request.POST.get('Return to Indication') == 'Return to Indication':
+        request.session['ret_from_confirm'] = True
+        return redirect('Pricing-decision_input', game_id=game_id)
+
+    if request.POST.get('Confirm Decisions') == 'Confirm Decisions':
+        request.session['ret_from_confirm'] = False
+        decision_obj.decisions_locked = True
+        decision_obj.save()
+        messages.success(request, f'Decisions submitted for year: {decision_obj.year}')
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    template_name = 'Pricing/decision_confirm.html'
+
+    context = {
+        'title': ' - Confirm Decisions',
+        'game': game,
+        }
+
     return render(request, template_name, context)
 
 

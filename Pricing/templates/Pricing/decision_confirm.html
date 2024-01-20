@@ -32,7 +32,7 @@
                                         <span>{{ current_prem | safe}}</span>
                                     </div>
                                     <div class="indic">
-                                        <label for="indic_prem" style="margin-right: 41px;">Indicated Premium:</label>
+                                        <label for="indic_prem" style="margin-right: 41px;">Final Proposed Premium:</label>
                                         <span>{{ indicated_prem | safe}}</span>
                                     </div>
                                     <div class="indic">
@@ -54,33 +54,15 @@
                                         {% csrf_token %}
                                         <div class="decis">
                                             <label for="profit">Selected Profit Margin (%):</label>
-                                            <div class="select-wrapper">
-                                                <select id="profit" name="profit" {% if froze_lock %}disabled{% endif %}>
-                                                {% for profit_margin in profit_margins %}
-                                                    <option value="{{ profit_margin }}" {% if sel_profit_margin == profit_margin %}selected{% endif %}>{{ profit_margin }}</option>
-                                                {% endfor %}
-                                                </select>
-                                            </div>
+                                            <span>{{ sel_profit_margin | safe}}</span>
                                         </div>
                                         <div class="decis">
                                             <label for="mktg" style="margin-right: 10px;">Selected Marketing Expense (%):</label>
-                                            <div class="select-wrapper">
-                                                <select id="mktg" name="mktg" {% if froze_lock %}disabled{% endif %}>
-                                                {% for mktg_expense in mktg_expenses %}
-                                                    <option value="{{ mktg_expense }}" {% if sel_mktg_expense == mktg_expense %}selected{% endif %}>{{ mktg_expense }}</option>
-                                                {% endfor %}
-                                                </select>
-                                            </div>
+                                            <span>{{ sel_mktg_expense | safe}}</span>
                                         </div>
                                         <div class="decis">
                                             <label for="loss" style="margin-right: 18px;">Selected Loss Trend Margin (%):</label>
-                                            <div class="select-wrapper">
-                                                <select id="loss" name="loss" {% if froze_lock %}disabled{% endif %}>
-                                                {% for loss_margin in loss_margins %}
-                                                    <option value="{{ loss_margin }}" {% if sel_loss_margin == loss_margin %}selected{% endif %}>{{ loss_margin }}</option>
-                                                {% endfor %}
-                                                </select>
-                                            </div>
+                                            <span>{{ sel_loss_margin | safe}}</span>
                                         </div>
 
                                         <div>

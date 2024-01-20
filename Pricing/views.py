@@ -84,6 +84,7 @@ def individual(request):
                     'sel_type_02': form.cleaned_data['sel_type_02'],
                     'sel_type_03': form.cleaned_data['sel_type_03'],
                     'game_observable': form.cleaned_data['game_observable'],
+                    'default_selection_type': form.cleaned_data['default_selection_type'],
                 }
             )
 
@@ -98,6 +99,14 @@ def individual(request):
                 game_observable=game_prefs.game_observable,
             )
 
+            user_profile = form.cleaned_data['default_selection_type']
+            if user_profile == 'Balanced':
+                profile_type = 'balanced'
+            elif user_profile == 'Growth':
+                profile_type = 'growth'
+            elif user_profile == 'Profit':
+                profile_type = 'profitability'
+
             next_player_id = 0
             Players.objects.update_or_create(
                 game=game,
@@ -105,7 +114,7 @@ def individual(request):
                 player_name=str(request.user),
                 player_id_display=next_player_id,
                 player_type='user',
-                profile='individual',
+                profile=profile_type,
             )
 
             next_player_id += 1
@@ -1620,6 +1629,16 @@ def decision_input(request, game_id):
 
     selected_year = None
     sel_profit_margin = None
+    mct_ratio = None
+    mct_label = None
+    mct_pass = None
+    profit_margins = None
+    mktg_expenses = None
+    loss_margins = None
+    osfi_alert = None
+    current_prem = None
+    indicated_prem = None
+    rate_chg = None
     froze_lock = False
     decisions_locked = False
 
@@ -1926,7 +1945,7 @@ def decision_input(request, game_id):
         'unique_years': unique_years,
         'selected_year': selected_year,
         'mct_label': mct_label,
-        'mct_ratio': f'{round(100 * mct_ratio, 1)}%',
+        'mct_ratio': f'{round(100 * mct_ratio if mct_ratio is not None else 0, 1)}%',
         'mct_pass': mct_pass,
         'profit_margins': profit_margins,
         'sel_profit_margin': f'{sel_profit_margin}',
@@ -1937,9 +1956,9 @@ def decision_input(request, game_id):
         'froze_lock': froze_lock,
         'osfi_alert': osfi_alert,
         'decisions_locked': decisions_locked,
-        'current_prem': f'${current_prem:,.2f}',
-        'indicated_prem': f'${indicated_prem:,.2f}',
-        'rate_chg': f'<span class="violet-text">{round(100 * rate_chg,1):,.1f}% </span>',
+        'current_prem': f'${current_prem if current_prem is not None else 0:,.2f}',
+        'indicated_prem': f'${indicated_prem if indicated_prem is not None else 0:,.2f}',
+        'rate_chg': f'<span class="violet-text">{round(100 * rate_chg if rate_chg is not None else 0,1):,.1f}% </span>',
     }
     return render(request, template_name, context)
 
@@ -1949,8 +1968,6 @@ def decision_confirm(request, game_id):
     user = request.user
     game = get_object_or_404(IndivGames,
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
-    selected_year = request.session.get('selected_year', 0)
-    decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year).first()
 
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
@@ -1958,6 +1975,25 @@ def decision_confirm(request, game_id):
     if request.POST.get('Return to Indication') == 'Return to Indication':
         request.session['ret_from_confirm'] = True
         return redirect('Pricing-decision_input', game_id=game_id)
+
+    selected_year = request.session.get('selected_year', 0)
+    decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year).first()
+    indication_obj = Indications.objects.filter(game_id=game, player_id=user)
+    unique_years = indication_obj.order_by('-year').values_list('year', flat=True).distinct()
+
+    indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']
+    mct_ratio = decimal.Decimal(indication_data_dict['mct_ratio'])
+    mct_capital_reqd = indication_data_dict['mct_capital_reqd']
+    pass_capital_test = indication_data_dict['pass_capital_test']
+    mct_label = f'MCT Ratio (Target @ {100 * mct_capital_reqd:,.1f}%):'
+
+    if pass_capital_test == 'Pass':
+        mct_pass = '<span class="green-text"><b>' + pass_capital_test + '</b></span>'
+        osfi_alert = False
+    else:
+        mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
+        osfi_alert = True
+        froze_lock = True
 
     if request.POST.get('Confirm Decisions') == 'Confirm Decisions':
         request.session['ret_from_confirm'] = False
@@ -1967,11 +2003,26 @@ def decision_confirm(request, game_id):
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
     template_name = 'Pricing/decision_confirm.html'
+    curr_avg_prem = decision_obj.curr_avg_prem
+    final_avg_prem = decision_obj.sel_avg_prem
+    if curr_avg_prem != 0:
+        rate_chg = final_avg_prem / curr_avg_prem -1
+    else:
+        rate_chg = 0
 
     context = {
         'title': ' - Confirm Decisions',
         'game': game,
-        }
+        'mct_label': mct_label,
+        'mct_pass': mct_pass,
+        'mct_ratio': f'{round(100 * mct_ratio, 1)}%',
+        'current_prem': f'${curr_avg_prem:,.2f}',
+        'indicated_prem': f'${final_avg_prem:,.2f}',
+        'rate_chg': f'<span class="violet-text">{round(100 * rate_chg, 1):,.1f}% </span>',
+        'sel_profit_margin': f'{decision_obj.sel_profit_margin}',
+        'sel_mktg_expense': f'{decision_obj.sel_exp_ratio_mktg}',
+        'sel_loss_margin': f'{decision_obj.sel_loss_trend_margin}',
+    }
 
     return render(request, template_name, context)
 

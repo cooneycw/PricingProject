@@ -10,6 +10,7 @@ class GamePrefs(models.Model):
     sel_type_03 = models.IntegerField()
     human_player_cnt = models.IntegerField(default=1)
     game_observable = models.BooleanField()
+    default_selection_type = models.CharField(max_length=8)
     timestamp = models.DateTimeField(auto_now=True)  # This field will be updated every time the model is saved.
 
 
@@ -146,7 +147,17 @@ class Decisions(models.Model):
     decisions_game_stage = models.CharField(max_length=128, null=True, blank=True)
     decisions_time_stamp = models.JSONField()
     curr_avg_prem = models.DecimalField(max_digits=18, decimal_places=2)
-    server_indic_avg_prem = models.DecimalField(max_digits=18, decimal_places=2)
+
+
+class Decisionsns(models.Model):
+    game = models.ForeignKey(IndivGames, on_delete=models.CASCADE)
+    player_id = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    player_name = models.CharField(max_length=128, null=True, blank=True)
+    year = models.IntegerField()
+    sel_profit_margin = models.IntegerField()
+    sel_loss_trend_margin = models.IntegerField()
+    sel_exp_ratio_mktg = models.IntegerField()
+    sel_avg_prem = models.DecimalField(max_digits=18, decimal_places=2)
 
 
 class ChatMessage(models.Model):

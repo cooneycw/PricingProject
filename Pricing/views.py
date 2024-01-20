@@ -539,6 +539,7 @@ def mktgsales_report(request, game_id):
                 sales = float(transposed_df.at['Sales', year].replace(',', ''))
                 canx = float(transposed_df.at['Cancellations', year].replace(',', ''))
                 in_force = float(transposed_df.at['Beginning-In-Force', year].replace(',', ''))
+                in_force_end = float(transposed_df.at['Ending-In-Force', year].replace(',', ''))
                 in_force_ind = float(transposed_df.at['Industry-In-Force', year].replace(',', ''))
                 marketing_expense = float(transposed_df.at['Marketing Expense', year].replace('$', '').replace(',', ''))
                 industry_marketing_expense = float(
@@ -559,8 +560,8 @@ def mktgsales_report(request, game_id):
                     retention_ratio = ((in_force - canx) / in_force) * 100
                 else:
                     retention_ratio = 0
-                if in_force_ind > 0:
-                    mkt_share = (in_force / in_force_ind) * 100
+                if in_force_end > 0:
+                    mkt_share = (in_force_end / in_force_ind) * 100
                 else:
                     mkt_share = 0
                 # Store the calculated percentage in our dictionary

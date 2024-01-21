@@ -19,7 +19,7 @@
                 {% if has_financial_data %}
                     <div class="container" style="text-align: left; margin-top: 2px; "> <!-- Added some top margin -->
                         <div style="padding-left: 20px;  margin-bottom: 20px;">
-                            <form method="GET" action="">
+                            <form method="POST" action="">
                               {% csrf_token %}
                               <div class="form-group" style="margin-bottom: 10px;margin-right: 14px">
                                   <label for="year" style="margin-right: 14px">Report Year:</label>

@@ -1140,20 +1140,20 @@ def valuation_report(request, game_id):
                     # Rename and format the 'written_premium' row
                     new_row_name = 'Future Proj Value (MM)'
                     transposed_df.loc[index] = row.apply(
-                        lambda x: f"${.1 * round(x/100000):.1f}")  # formatting as currency without decimals
+                        lambda x: f"${.1 * round(x/100000):,.1f}")  # formatting as currency without decimals
                 elif index == 'dividend_pv':
                     # Rename and format the 'written_premium' row
                     new_row_name = 'P.V. Dividends (MM)'
                     transposed_df.loc[index] = row.apply(
-                        lambda x: f"${.1 * round(x/100000):.1f}")  # formatting as currency without decimals
+                        lambda x: f"${.1 * round(x/100000):,.1f}")  # formatting as currency without decimals
                 elif index == 'excess_capital':
                     new_row_name = f'Excess Capital (MM)'
                     transposed_df.loc[index] = row.apply(
-                        lambda x: f"${.1 * round(x/100000):.1f}")  # formatting as currency without decimals
+                        lambda x: f"${.1 * round(x/100000):,.1f}")  # formatting as currency without decimals
                 elif index == 'total_valuation':
                     new_row_name = 'Total Valuation (MM)'
                     transposed_df.loc[index] = row.apply(
-                        lambda x: f"${.1 * round(x/100000):.1f}")  # formatting as currency without decimals
+                        lambda x: f"${.1 * round(x/100000):,.1f}")  # formatting as currency without decimals
                 elif index == 'Valuation Rank':
                     new_row_name = 'Valuation Rank'
 
@@ -1248,7 +1248,7 @@ def claim_devl_report(request, game_id):
             latest_year = all_data_years.max()
             if selected_year not in unique_years:
                 selected_year = unique_years[0]
-            triangle_df = triangle_df[triangle_df['year'] == selected_year]
+            triangle_df = triangle_df[triangle_df['year'] == selected_year].reset_index(drop=True)
 
             claim_data = triangle_df.triangles[0]['triangles']
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
@@ -1371,7 +1371,7 @@ def claim_trend_report(request, game_id):
         coverage_id_list.append(count_id)
     coverage_options = list(zip(coverage_id_list, coverage_list))
 
-    selected_coverage = request.GET.get('coverage')
+    selected_coverage = request.POST.get('coverage')
     selected_coverage = int(selected_coverage) if selected_coverage else default_coverage_id
 
     template_name = 'Pricing/claim_trend_report.html'
@@ -1394,13 +1394,13 @@ def claim_trend_report(request, game_id):
             latest_year = all_data_years.max()
             if selected_year not in unique_years:
                 selected_year = unique_years[0]
-            triangle_df = triangle_df[triangle_df['year'] == selected_year]
+            triangle_df = triangle_df[triangle_df['year'] == selected_year].reset_index(drop=True)
             financial_df = financial_df[financial_df['year'] >= (selected_year - 5)]
             claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
             if claimtrend_obj:
                 claimtrend_dict = claimtrend_obj.claim_trends
 
-            claim_data = triangle_df.triangles[0]['triangles']
+            claim_data = triangle_df['triangles'][0]['triangles']
             clm_yrs = [acc_yr for acc_yr in claim_data['acc_yrs']]
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
             devl_mths = [(yr + 1)*12 for yr in claim_data['devl_yrs']]
@@ -1475,7 +1475,7 @@ def claim_trend_report(request, game_id):
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
                 elif categ == 'In-Force':
                     for m in range(len(acc_yrs)):
-                        display_df.iloc[i, m] = financial_df.iloc[len(acc_yrs) - m - 1, 1]
+                        display_df.iloc[i, m] = financial_df.iloc[len(financial_df) - m - 1 - (max(unique_years) - selected_year), 1]
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
                 elif categ == 'Loss Cost':
                     for n in range(len(acc_yrs)):
@@ -1490,9 +1490,9 @@ def claim_trend_report(request, game_id):
                 elif categ == 'Claim Count':
                     for o in range(len(acc_yrs)):
                         if selected_coverage in [1, 2]: # collision or total
-                            display_df.iloc[i, o] = financial_df.iloc[len(acc_yrs) - o - 1, 3]
+                            display_df.iloc[i, o] = financial_df.iloc[len(financial_df) - o - 1 - (max(unique_years) - selected_year), 3]
                         else:
-                            display_df.iloc[i, o] = financial_df.iloc[len(acc_yrs) - o - 1, 2]
+                            display_df.iloc[i, o] = financial_df.iloc[len(financial_df) - o - 1 - (max(unique_years) - selected_year), 2]
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
                 elif categ == 'Frequency':
                     for p in range(len(acc_yrs)):
@@ -1659,20 +1659,22 @@ def decision_input(request, game_id):
 
     indication_obj = Indications.objects.filter(game_id=game, player_id=user)
     claimtrend_data = ClaimTrends.objects.filter(game_id=game)
-    financial_data = Financials.objects.filter(game_id=game, player_id=user)
 
     unique_years = indication_obj.order_by('-year').values_list('year', flat=True).distinct()
     if unique_years:  # Proceed if there are any financial years available
+        if selected_year not in unique_years:
+            selected_year = unique_years[0]
 
         # coverages = ['Bodily Injury', 'Collision', 'Total']
         # for count_id, coverage in enumerate(coverages):
         #    coverage_list.append(coverage)
         #    coverage_id_list.append(count_id)
         # coverage_options = list(zip(coverage_id_list, coverage_list))
-
+        financial_data = Financials.objects.filter(game_id=game, player_id=user)
         financial_data_list = list(financial_data.values('year', 'in_force', 'written_premium'))
         financial_df = pd.DataFrame(financial_data_list)
         if not financial_df.empty:
+            indication_obj = Indications.objects.filter(game_id=game, player_id=user, year=selected_year)
             indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']
             devl_data = indication_data_dict['devl_data']
             wts = indication_data_dict['indic_wts']
@@ -1690,9 +1692,6 @@ def decision_input(request, game_id):
 
             all_data_years = copy.deepcopy(clm_yrs)  # Get all unique years
             all_data_years.reverse()
-
-            if selected_year not in unique_years:
-                selected_year = unique_years[0]
 
             decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year).first()
             decision_obj_last = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year-1).first()
@@ -1810,7 +1809,7 @@ def decision_input(request, game_id):
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
                 elif categ == 'In-Force':
                     for m in range(len(acc_yrs)):
-                        display_df.iloc[i, m] = financial_df.iloc[len(acc_yrs) - m - 1, 1]
+                        display_df.iloc[i, m] = financial_df.iloc[len(financial_df) - m - 1 - (max(unique_years) - selected_year), 1]
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
                     in_force = display_df.iloc[i, 0]
                 elif categ == 'Loss Cost':
@@ -1889,7 +1888,7 @@ def decision_input(request, game_id):
             if in_force != 0:
                 fixed_cost = fixed_exp / in_force
                 display_df_fmt.iloc[wtd_ind + 1, 0] = f'${round(fixed_exp/in_force,2):,.2f}'
-                current_prem = float(round(financial_df.iloc[len(acc_yrs) - 1]['written_premium'] / in_force, 2))
+                current_prem = float(round(financial_df.iloc[len(financial_df) - 1 - (max(unique_years) - selected_year)]['written_premium'] / in_force, 2))
             else:
                 display_df_fmt.iloc[wtd_ind + 1, 0] = 0
                 current_prem = 0
@@ -1897,7 +1896,7 @@ def decision_input(request, game_id):
             display_df_fmt.iloc[wtd_ind + 3, 0] = f'{round(prem_var_cost * 100, 1):,.1f}%'
             display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(sel_mktg_expense), 1):,.1f}%'
             display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(sel_profit_margin), 1):,.1f}%'
-            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - (expos_var_cost / 100) - (decimal.Decimal(int(sel_mktg_expense)) / 100) -
+            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - prem_var_cost - (decimal.Decimal(int(sel_mktg_expense)) / 100) -
                                                                           (decimal.Decimal(int(sel_profit_margin)) / 100))), 2))
             if request.POST.get('Submit') == 'Submit':
                 test_prem = request.session.get('indicated_prem', 0)
@@ -1979,7 +1978,7 @@ def decision_confirm(request, game_id):
 
     selected_year = request.session.get('selected_year', 0)
     decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year).first()
-    indication_obj = Indications.objects.filter(game_id=game, player_id=user)
+    indication_obj = Indications.objects.filter(game_id=game, player_id=user, year=selected_year)
     unique_years = indication_obj.order_by('-year').values_list('year', flat=True).distinct()
 
     indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']

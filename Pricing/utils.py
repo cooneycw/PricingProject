@@ -12,7 +12,7 @@ def reverse_pv_index(group):
 
 
 def calculate_growth_rate(row, latest_year, earliest_year):
-    g = min(0.07, max(-0.07, (row['in_force'] / row['beg_in_force']) ** (latest_year - earliest_year) - 1))
+    g = min(0.07, max(-0.07, (float(row['in_force']) / float(row['beg_in_force'])) ** (1/(latest_year - earliest_year)) - 1))
     return Decimal(g)
 
 
@@ -80,7 +80,7 @@ def perform_logistic_regression(data, reform_fact):
         return reform, est, ret_preds
     else:
         df = df.drop(columns=['Ln_Value', 'Value'])
-        new_row_a = {'Year': 2023}
+        new_row_a = {'Year': proj_year}
         df = pd.concat([df, pd.DataFrame([new_row_a])], ignore_index=True)
         df = df.sort_values(by=['Year'], ascending=[True])
         predicted_ln_value = model.predict(df)

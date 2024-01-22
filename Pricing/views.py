@@ -1249,6 +1249,7 @@ def claim_devl_report(request, game_id):
             if selected_year not in unique_years:
                 selected_year = unique_years[0]
             triangle_df = triangle_df[triangle_df['year'] == selected_year].reset_index(drop=True)
+            triangle_df = triangle_df.sort_values('year', ascending=False)
 
             claim_data = triangle_df.triangles[0]['triangles']
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
@@ -1395,7 +1396,8 @@ def claim_trend_report(request, game_id):
             if selected_year not in unique_years:
                 selected_year = unique_years[0]
             triangle_df = triangle_df[triangle_df['year'] == selected_year].reset_index(drop=True)
-            financial_df = financial_df[financial_df['year'] >= (selected_year - 5)]
+            financial_df = financial_df[financial_df['year'] > (selected_year - 5)]
+            financial_df = financial_df.sort_values('year', ascending=True)
             claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
             if claimtrend_obj:
                 claimtrend_dict = claimtrend_obj.claim_trends
@@ -1673,6 +1675,9 @@ def decision_input(request, game_id):
         financial_data = Financials.objects.filter(game_id=game, player_id=user)
         financial_data_list = list(financial_data.values('year', 'in_force', 'written_premium'))
         financial_df = pd.DataFrame(financial_data_list)
+        financial_df = financial_df[financial_df['year'] > (selected_year - 5)]
+        financial_df = financial_df.sort_values('year', ascending=True)
+
         if not financial_df.empty:
             indication_obj = Indications.objects.filter(game_id=game, player_id=user, year=selected_year)
             indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']

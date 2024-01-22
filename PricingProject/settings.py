@@ -52,13 +52,13 @@ if DEBUG:
     POSTGRES_PORT = secret_dict['POSTGRES_PORT_DEV']
     POSTGRES_HOST = secret_dict['POSTGRES_HOST_DEV']
 
-ALLOWED_HOSTS = ['127.0.0.1', 'essentai.ca']
+ALLOWED_HOSTS = ['127.0.0.1', 'essent.ai']
 
 # CSRF_TRUSTED_ORIGINS = ["https://the6ixclan.ca"]
 if DEBUG:
-    CSRF_TRUSTED_ORIGINS = ["https://the6ixclan.ca", "http://localhost:8080", "http://127.0.0.1:8080"]
+    CSRF_TRUSTED_ORIGINS = ["https://essent.ai", "http://essent.ai", "http://localhost:8080", "http://127.0.0.1:8080"]
 else:
-    CSRF_TRUSTED_ORIGINS = ["https://the6ixclan.ca", "http://the6ixclan.ca"]
+    CSRF_TRUSTED_ORIGINS = ["https://essent.ai", "http://essent.ai"]
 
 # Application definition
 print('csrf')

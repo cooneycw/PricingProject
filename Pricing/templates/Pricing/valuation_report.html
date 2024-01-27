@@ -5,21 +5,23 @@
     <main class="page landing-page">
         <section class="clean-block clean-info dark">
             <div class="container">
-                <div class="block-heading" style="text-align:center; margin-bottom: 0;">
+                <div class="block-heading" style="display: flex; align-items: center; justify-content: space-between;">
+                    <h4 style="margin-right: 20px;font-weight: bold">Valuation Report</h4>
                     <form method="POST">
                         {% csrf_token %}
                         <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
                     </form>
                 </div>
+
                 {% if not has_financial_data %}
                     <div class="block-heading" style="text-align: left">
                         <p>Valuation data processing not yet complete.  Please await notification in the Message Centre.</p>
                     </div>
                 {% endif %}
                 {% if has_financial_data %}
-                    <div class="block-heading" style="text-align: left; margin-top: 2px; "> <!-- Added some top margin -->
                         <div style="padding-left: 20px;  margin-bottom: 20px;">
-                            <h5>{{ valuation_period }}</h5>
+                            <h6>{{ valuation_period }}</h6>
+
                             <form method="POST" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
                                 {% csrf_token %}
                                 <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
@@ -38,7 +40,6 @@
                                 {{ financial_data_table|safe }}
                             </div>
                         </div>
-                    </div>
                 {% endif %}
             </div>
         </section>

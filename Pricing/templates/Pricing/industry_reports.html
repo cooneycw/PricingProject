@@ -5,7 +5,8 @@
     <main class="page landing-page">
         <section class="clean-block clean-info dark">
             <div class="container">
-                <div class="block-heading" style="text-align:center; margin-bottom: 0;">
+                <div class="block-heading" style="display: flex; align-items: center; justify-content: space-between;">
+                    <h4 style="margin-right: 20px;font-weight: bold">Industry Reports</h4>
                     <form method="POST">
                         {% csrf_token %}
                         <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
@@ -17,11 +18,11 @@
                     </div>
                 {% endif %}
                 {% if has_financial_data %}
-                    <div class="block-heading" style="text-align: left; margin-top: 2px;">
+
                         <div style="padding-left: 20px; margin-bottom: 20px;">
                             <form method="GET" action="" style="display: block;"> <!-- Changed to block display -->
                                 <div class="form-group"> <!-- Added a wrapper for each form group -->
-                                    <label for="year">Latest Financial Year for Display:</label>
+                                    <label for="year">Latest Year for Display:</label>
                                     <select id="year" name="year">
                                         {% for year in unique_years %}
                                             <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
@@ -45,7 +46,6 @@
                                 {{ financial_data_table | safe }}
                             </div>
                         </div>
-                    </div>
                 {% endif %}
             </div>
         </section>

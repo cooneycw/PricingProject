@@ -1030,8 +1030,8 @@ def valuation_report(request, game_id):
             val_df = val_df.sort_values(by=['player_name', 'year'])
             all_data_years = val_df['year'].unique()  # Get all unique years
             latest_year = all_data_years.max()
-            earliest_year = max((latest_year - 10), all_data_years.min())
-            valuation_period = f'Valuation Report utilizing: {earliest_year} - {latest_year} '
+            earliest_year = max((latest_year - 10 + 1), all_data_years.min())
+            valuation_period = f'Utilizing estimates from period: {earliest_year} - {latest_year} '
 
             ordered_data = valuation_data.order_by('id', 'player_name')
 
@@ -1089,10 +1089,12 @@ def valuation_report(request, game_id):
 
             # print(f'companies: {companies} max_pos: {max_pos} curr_pos: {curr_pos}  default_pos: {default_pos}  start_pos: {start_pos}  displayed: {displayed_players}')
             val_df = val_df.groupby('player_name').apply(reverse_pv_index).reset_index(drop=True)
+
             val_df['dividend_pv'] = val_df['new_pv_index'] * val_df['dividend_paid']
+            val_df['profit'] = np.where(val_df['year'] >=earliest_year, val_df['profit'], 0)
             val_df['excess_capital'] = np.where(val_df['year'] == selected_year, val_df['excess_capital'], 0)
             val_df['in_force'] = np.where(val_df['year'] == selected_year, val_df['in_force'], 0)
-            val_df['tot_in_force'] = val_df['beg_in_force']
+            val_df['tot_in_force'] = np.where(val_df['year'] >= earliest_year, val_df['beg_in_force'], 0)
             val_df['beg_in_force'] = np.where(val_df['year'] == earliest_year, val_df['beg_in_force'], 0)
             val_df['future_value'] = 0
             val_df['total_valuation'] = val_df['dividend_pv'] + val_df['excess_capital']
@@ -1106,8 +1108,8 @@ def valuation_report(request, game_id):
                                                     'future_value': 'sum',
                                                     'total_valuation': 'sum'}).reset_index()
             df['capped_growth_rate'] = df.apply(lambda row: calculate_growth_rate(row, latest_year, earliest_year ), axis=1)
-            df['avg_profit'] = df.apply(lambda row: calculate_avg_profit(row, latest_year, earliest_year),  axis=1)
-            df['future_value'] = df.apply(lambda row: calculate_future_value(row, latest_year, earliest_year, irr_rate_scalar), axis=1)
+            df['avg_profit'] = df.apply(lambda row: calculate_avg_profit(row,),  axis=1)
+            df['future_value'] = df.apply(lambda row: calculate_future_value(row, irr_rate_scalar), axis=1)
             df['total_valuation'] = df['total_valuation'] + df['future_value']
             # Rename the 'player_name' column to 'Company'
             df = df.rename(columns={'player_name': 'Company'})
@@ -1231,7 +1233,7 @@ def claim_devl_report(request, game_id):
         coverage_id_list.append(count_id)
     coverage_options = list(zip(coverage_id_list, coverage_list))
 
-    selected_coverage = request.GET.get('coverage')
+    selected_coverage = request.POST.get('coverage')
     selected_coverage = int(selected_coverage) if selected_coverage else default_coverage_id
 
     template_name = 'Pricing/claim_devl_report.html'
@@ -1266,6 +1268,10 @@ def claim_devl_report(request, game_id):
 
             transposed_df = df.T
             transposed_incd_df = incd_df.T
+            transposed_incd_df.iloc[3, 2] = 0
+            transposed_incd_df.iloc[4, 1] = 0
+            transposed_incd_df.iloc[4, 2] = 0
+
             transposed_booked_error_df = copy.deepcopy(incd_df.T).iloc[0:3, :]
             transposed_booked_error_df.iloc[0:3, 0] = transposed_booked_error_df.iloc[0:3, 0] / transposed_booked_error_df.iloc[0:3, 2] - 1
             transposed_booked_error_df.iloc[0:3, 1] = transposed_booked_error_df.iloc[0:3, 1] / transposed_booked_error_df.iloc[0:3, 2] - 1

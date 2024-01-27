@@ -9,7 +9,7 @@
                     <div class="container">
                         <div class="row">
                             <div class="col-md-8"> <!-- Limit to 25% of the screen width -->
-                                <h5>Message Centre</h5>
+                                <h5 style="font-weight: bold">Message Centre</h5>
                                 <div id="chat-example" class="block-heading" style="text-align:left; border: 3px solid #2196F3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                     <!-- Chat interface -->
                                     <input id="chat-message-input" type="text" placeholder="Enter your message">
@@ -19,7 +19,7 @@
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <h5 style="margin-bottom: 45px;">Performance Reports</h5>
+                                <h5 style="margin-bottom: 45px;font-weight: bold">Performance Reports</h5>
                                     <div class="row"> <!-- Additional nested row for the images -->
                                         <div class="col-md-3 mb-3">
                                             <a href="{% url 'Pricing-mktgsales_report' game.game_id %}" class="report-icon" title="Marketing / Sales Report"><img src="{% static 'Pricing/001_advertising.png'  %}" alt="Marketing / Sales Report" width="80"></a>
@@ -37,7 +37,7 @@
                                             <a href="{% url 'Pricing-claim_trend_report' game.game_id %}" class="report-icon" title="Claim Trend Report"><img src="{% static 'Pricing/005_claims.png'  %}" alt="Claim Trend Report" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="#" class="report-icon" title="Advanced Analytics"><img src="{% static 'Pricing/006_artificial_intelligence.png'  %}" alt="Advanced Analytics" width="80"></a>
+                                            <a href="#" class="report-icon" title="Advanced Analytics (not yet implemented)"><img src="{% static 'Pricing/006_artificial_intelligence.png'  %}" alt="Advanced Analytics" width="80"></a>
                                         </div>
                                         <div class="col-md-3 mb-3">
                                             <a href="{% url 'Pricing-valuation_report' game.game_id %}" class="report-icon" title="Valuation Report"><img src="{% static 'Pricing/007_diamond.png'  %}" alt="Valuation Report" width="80"></a>

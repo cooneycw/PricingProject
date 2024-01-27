@@ -16,14 +16,14 @@ def calculate_growth_rate(row, latest_year, earliest_year):
     return Decimal(g)
 
 
-def calculate_avg_profit(row, latest_year, earliest_year):
+def calculate_avg_profit(row):
     if row['tot_in_force'] == 0:
         row['tot_in_force'] = 0
     avg_profit = row['profit'] / row['tot_in_force']
     return avg_profit
 
 
-def calculate_future_value(row, latest_year, earliest_year, irr):
+def calculate_future_value(row, irr):
     result = row['in_force'] * row['avg_profit'] / (irr - row['capped_growth_rate'])
     return result
 

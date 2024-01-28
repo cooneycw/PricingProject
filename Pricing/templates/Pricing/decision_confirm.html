@@ -5,19 +5,18 @@
     <main class="page landing-page">
         <section class="clean-block clean-info dark">
             <div class="container" style="text-align:center">
-                <div class="container">
-                    <div class="block-heading" style="text-align:center; margin-bottom: 24px;">
-                        <form method="POST">
-                            {% csrf_token %}
-                            <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
-                        </form>
-                    </div>
+                <div class="block-heading" style="display: flex; align-items: center; justify-content: space-between;">
+                    <h4 style="margin-right: 20px;font-weight: bold;color: #0a53be"> </h4>
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
+                    </form>
                 </div>
                     <div class="container">
                         <div class="row">
                             <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
-                                <h5>Indication Centre</h5>
-                                <div class="block-heading" style="font-family: 'Roboto Mono'; text-align:left; border: 3px solid #2196f3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                <h5 style="font-weight: bold;color: #0a53be;">Indication Centre</h5>
+                                <div class="block-heading" style="font-family: 'Roboto Mono'; text-align:left; border:3px solid #000000; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                     <!-- Insert Reports -->
                                     <div class="indic">
                                         <label for="regulatory" style="margin-right: 120px;">{{ mct_label }}</label>
@@ -42,9 +41,9 @@
                                 </div>
                             </div>
                             <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
-                                <h5>Decision Centre {% if osfi_alert %}(disabled due to regulatory intervention){% endif %}</h5>
+                                <h5 style="font-weight: bold;color: #0a53be">Decision Centre {% if osfi_alert %}(disabled due to regulatory intervention){% endif %}</h5>
                                 {% if not osfi_alert %}
-                                    <div class="block-heading" style="font-family: 'Roboto Mono'; text-align:left; border: 3px solid #2196F3; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                    <div class="block-heading" style="font-family: 'Roboto Mono'; text-align:left; border: 3px solid rgb(11,231,116); border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                 {% endif %}
                                 {% if osfi_alert %}
                                     <div class="block-heading" style="text-align:left; border: 3px solid #ff0000; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">

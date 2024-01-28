@@ -791,12 +791,21 @@ def industry_reports(request, game_id):
     game = get_object_or_404(IndivGames,
                              Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
 
+    # Check for 'Back to Game Select' POST request
+    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        return redirect('Pricing-game_dashboard', game_id=game_id)
+
+    selected_year = request.POST.get('year')  # Get the selected year from the query parameters
+    selected_year = int(selected_year) if selected_year else None
+    curr_pos = request.session.get('curr_pos', 0)
+
     template_name = 'Pricing/industry_reports.html'
-    industry_data = Industry.objects.filter(game_id=game)
-    unique_years = industry_data.order_by('-year').values_list('year', flat=True).distinct()
+
+    all_data = Industry.objects.filter(game_id=game)
+    unique_years = all_data.order_by('-year').values_list('year', flat=True).distinct()
     latest_year = unique_years[0] if unique_years else None
 
-    ordered_data = industry_data.order_by('id', 'player_name')
+    ordered_data = all_data.order_by('id', 'player_name')
 
     # Keep track of the players you've already seen
     seen_players = set()
@@ -813,71 +822,99 @@ def industry_reports(request, game_id):
     player_id_list = []
     player_list = []
     for count_id, unique_player in enumerate(distinct_players):
-        player_name = f"{1 + count_id:02d} - {unique_player}"
+        player_name = f"{unique_player}"
         if unique_player == request.user.username:
             default_player_id = count_id
         player_list.append(player_name)
         player_id_list.append(count_id)
 
+    max_pos = max(len(player_id_list) - 4, 0)
+
+    # Update curr_pos based on Next and Last buttons
+    if request.POST.get('Next') == 'Next':
+        curr_pos = min(curr_pos + 1, max_pos)
+    if request.POST.get('Last') == 'Last':
+        curr_pos = max(curr_pos - 1, 0)
+
+    # Save the updated curr_pos in the session
+    request.session['curr_pos'] = curr_pos
+
+    # Find the position of default_player_id
+    default_pos = player_id_list.index(default_player_id)
+
+    # Calculate the starting position for displayed_players
+    # It should always start with default_player_id and show next 3 players in the list
+    start_pos = max(default_pos + curr_pos, 0)
+    end_pos = min(start_pos + 4, len(player_id_list))
+
+    # Build the displayed players list starting with default_player_id
+    displayed_players = [default_player_id] + player_id_list[start_pos + 1:end_pos]
+
+    # If the list is shorter than 4, pad it with the next available players
+    while len(displayed_players) < 4 and end_pos < len(player_id_list):
+        displayed_players.append(player_id_list[end_pos])
+        end_pos += 1
+
+    # Prepare the data for displayed companies (assuming player_list is a dictionary or list)
+    companies = [player_list[player_id] for player_id in displayed_players]
+
     industry_id = len(player_list)
-    player_list.append(f"{1 + len(player_list):02d} - Total Industry")
+    industry_company_name = "Total Industry"
+    player_list.append(f"{industry_company_name}" )
     player_id_list.append(len(player_id_list))
-    distinct_players.append('Total Industry')
+    distinct_players.append(industry_company_name)
 
     player_options = list(zip(player_id_list, player_list))
 
-    # Check for 'Back to Game Select' POST request
-    if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
-        return redirect('Pricing-game_dashboard', game_id=game_id)
-
-    selected_year = request.GET.get('year')  # Get the selected year from the query parameters
-    selected_year = int(selected_year) if selected_year else None
-
-    selected_player = request.GET.get('player')
-    selected_player = int(selected_player) if selected_player else default_player_id
-
     if unique_years:  # Proceed if there are any financial years available
-        if selected_player == industry_id:
-            # Create a DataFrame for the total view, excluding 'capital_test' and 'capital_ratio'
-            company_data = Industry.objects.filter(game_id=game).values('year').annotate(
-                written_premium=Sum('written_premium'),
-                annual_expenses=Sum('annual_expenses'),
-                cy_losses=Sum('cy_losses'),
-                profit=Sum('profit'),
-                capital=Sum('capital')
-            )
-            company_data_list = list(
-                company_data.values('year', 'written_premium', 'annual_expenses',
-                                'cy_losses', 'profit',
-                                'capital'))  # add more fields as necessary
+        if selected_year not in unique_years:
+            selected_year = unique_years[0]
+        # Create a DataFrame for the total view, excluding 'capital_test' and 'capital_ratio'
+        industry_data = Industry.objects.filter(game_id=game, year=selected_year).values('year').annotate(
+            written_premium=Sum('written_premium'),
+            annual_expenses=Sum('annual_expenses'),
+            cy_losses=Sum('cy_losses'),
+            profit=Sum('profit'),
+            capital=Sum('capital')
+        )
+        industry_data_list = list(
+            industry_data.values('written_premium', 'annual_expenses',
+                            'cy_losses', 'profit',
+                            'capital'))  # add more fields as necessary
 
-        else:
-            company_data = Industry.objects.filter(game_id=game, player_name=distinct_players[selected_player])
-            company_data_list = list(
-                company_data.values('year', 'written_premium', 'annual_expenses',
+        company_data = Industry.objects.filter(game_id=game, year=selected_year)
+        company_data_list = list(
+            company_data.values('player_name', 'written_premium', 'annual_expenses',
                                 'cy_losses', 'profit',
                                 'capital', 'capital_ratio', 'capital_test'))  # add more fields as necessary
 
         # Creating a DataFrame from the obtained data
-        df = pd.DataFrame(company_data_list)
+        industry_df = pd.DataFrame(industry_data_list)
+        industry_df['player_name'] = industry_company_name
+        company_df = pd.DataFrame(company_data_list)
 
-        if not df.empty:
+        for column in company_df.columns:
+            if column not in industry_df.columns:
+                industry_df[column] = pd.NA
+
+        combined_df = pd.concat([company_df, industry_df], ignore_index=True)
+
+        # Reset the index of the combined dataframe
+        combined_df.reset_index(drop=True, inplace=True)
+
+        if not combined_df.empty:
             if selected_year not in unique_years:
                 selected_year = latest_year
                 # Filter out only the rows belonging to the latest four years
-            all_data_years = df['year'].unique()  # Get all unique years
-            all_data_years = sorted(all_data_years, reverse=True)  # Sort and pick the latest four years
-            selected_years = sorted([yr for yr in all_data_years if yr <= selected_year], reverse=True)[:4]
-            df = df.sort_values('year', ascending=False)
+            all_data_players = combined_df['player_name'].unique()  # Get all unique players
+            all_data_players = sorted(all_data_players, reverse=False)  # Sort and pick the latest four years
+            selected_players = sorted([player for player in all_data_players], reverse=False)[:4]
 
-            # Creating a copy of the filtered DataFrame
-            df_latest = df[df['year'].isin(selected_years)].copy()
-
-            # Renaming columns without 'inplace=True'
-            df_latest.rename(columns={"year": "Year"}, inplace=True)
-
-            transposed_df = df_latest.set_index('Year').T  # Set 'year' as index before transposing
             # Now, we'll go through each row in the transposed DataFrame, rename it, and apply specific formatting
+            combined_df.rename(columns={"player_name": "Company"}, inplace=True)
+
+            transposed_df = combined_df.set_index('Company').T
+
             expense_ratio_data = {}
             loss_ratio_data = {}
             for index, row in transposed_df.iterrows():
@@ -902,26 +939,31 @@ def industry_reports(request, game_id):
                     # Rename and format the 'in_force' row
                     new_row_name = 'Capital'
                     transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'capital_ratio' and industry_id != selected_player:
+                elif index == 'capital_ratio':
                     # Rename and format the 'in_force' row
                     new_row_name = 'MCT Ratio'
                     transposed_df.loc[index] = row.apply(lambda x: f"{round(x * 100, 1)}%")  # formatting as an integer
-                elif index == 'capital_test' and industry_id != selected_player:
+                    transposed_df.loc[index][industry_company_name] = ' '
+                elif index == 'capital_test':
                     # Rename and format the 'in_force' row
                     new_row_name = 'MCT Test'
-
+                    transposed_df.loc[index][industry_company_name] = ' '
                 # Apply renaming to make the index/rows human-readable
                 transposed_df.rename(index={index: new_row_name}, inplace=True)
 
-            for year in transposed_df.columns:
+            displayed_players_names = [player_list[i] for i in displayed_players]
+
+            # Creating a new DataFrame with only the displayed players
+            transposed_df = transposed_df[displayed_players_names]
+
+            for player in transposed_df.columns:
                 # Convert the marketing expenses from string to float for calculation
-                wprem = float(transposed_df.at['Written Premium', year].replace('$', '').replace(',', ''))
-                annual_expenses = float(transposed_df.at['Annual Expenses', year].replace('$', '').replace(',', ''))
-                cy_losses = float(transposed_df.at['Calendar Year Losses', year].replace('$', '').replace(',', ''))
+                wprem = float(transposed_df.at['Written Premium', player].replace('$', '').replace(',', ''))
+                annual_expenses = float(transposed_df.at['Annual Expenses', player].replace('$', '').replace(',', ''))
+                cy_losses = float(transposed_df.at['Calendar Year Losses', player].replace('$', '').replace(',', ''))
                 # canx = float(transposed_df.at['Cancellations', year].replace(',', ''))
                 #in_force = float(transposed_df.at['Beginning-In-Force', year].replace(',', ''))
                 # in_force_ind = float(transposed_df.at['Industry-In-Force', year].replace(',', ''))
-
 
                 # Calculate the percentage (ensuring not to divide by zero)
                 if wprem > 0:
@@ -929,15 +971,14 @@ def industry_reports(request, game_id):
                 else:
                     expense_ratio = 0  # or None, or however you wish to represent this edge case
 
-                expense_ratio_data[year] = f"{expense_ratio:.1f}%"  # formatted to one decimal places
+                expense_ratio_data[player] = f"{expense_ratio:.1f}%"  # formatted to one decimal places
 
                 if wprem > 0:
                     loss_ratio = (cy_losses / wprem) * 100
                 else:
                     loss_ratio = 0  # or None, or however you wish to represent this edge case
 
-                loss_ratio_data[year] = f"{loss_ratio:.1f}%"  # formatted to one decimal places
-
+                loss_ratio_data[player] = f"{loss_ratio:.1f}%"  # formatted to one decimal places
 
             expense_ratio_df = pd.DataFrame(expense_ratio_data, index=['Expense Ratio'])
             loss_ratio_df = pd.DataFrame(loss_ratio_data, index=['Loss Ratio'])
@@ -952,14 +993,7 @@ def industry_reports(request, game_id):
             df_bottom_loss_ratio = transposed_df_exp.iloc[insert_position_loss_ratio:]
             transposed_df = pd.concat([df_top_loss_ratio, loss_ratio_df, df_bottom_loss_ratio])
 
-            selected_columns = [col for col in transposed_df.columns if int(col) <= selected_year]
-            transposed_df = transposed_df[selected_columns]
             # Convert the final, formatted DataFrame to HTML for rendering
-            if len(transposed_df.columns) < 4:
-                # If there are fewer than four years of data, we'll simulate the rest as empty columns
-                missing_years = 4 - len(transposed_df.columns)
-                for i in range(missing_years):
-                    transposed_df[f'{min(selected_columns) - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
 
             index = 1
             blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
@@ -971,10 +1005,10 @@ def industry_reports(request, game_id):
             index = 7
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
-            if selected_player != industry_id:
-                index = 9
-                transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
-                transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            # if selected_player != industry_id:
+            #     index = 9
+            #     transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            #     transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
 
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
@@ -988,12 +1022,10 @@ def industry_reports(request, game_id):
         'game': game,
         'financial_data_table': financial_data_table,
         'has_financial_data': company_data.exists(),
-        'company_selected': distinct_players[selected_player],
         'unique_years': unique_years,
         'latest_year': latest_year,
         'selected_year': selected_year,
         'player_options': player_options,
-        'selected_player': selected_player,
     }
     return render(request, template_name, context)
 
@@ -1186,7 +1218,6 @@ def valuation_report(request, game_id):
             index = 9
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
-
 
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)

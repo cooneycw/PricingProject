@@ -6,7 +6,7 @@
         <section class="clean-block clean-info dark">
             <div class="container">
                 <div class="block-heading" style="display: flex; align-items: center; justify-content: space-between;">
-                    <h4 style="margin-right: 20px;font-weight: bold">Industry Reports</h4>
+                    <h4 style="margin-right: 20px;font-weight: bold;color: #0a53be">Industry Financial Reports</h4>
                     <form method="POST">
                         {% csrf_token %}
                         <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
@@ -20,28 +20,19 @@
                 {% if has_financial_data %}
 
                         <div style="padding-left: 20px; margin-bottom: 20px;">
-                            <form method="GET" action="" style="display: block;"> <!-- Changed to block display -->
-                                <div class="form-group"> <!-- Added a wrapper for each form group -->
-                                    <label for="year">Latest Year for Display:</label>
+                            <form method="POST" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
+                                {% csrf_token %}
+                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
                                     <select id="year" name="year">
                                         {% for year in unique_years %}
                                             <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <div class="form-group"> <!-- Added another wrapper for the second group -->
-                                    <label for="player">Company:</label>
-                                    <select id="player" name="player">
-                                        {% for player_id, player_name in player_options %}
-                                            <option value="{{ player_id }}" {% if player_id == selected_player %}selected{% endif %}>{{ player_name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <input type="submit" value="Select">
+                                <input type="submit" value="Select" style="margin-right: 40px;">
+                                <input type="submit" name="Last" value="Last" style="margin-right: 10px;">
+                                <input type="submit" name="Next" value="Next">
                             </form>
-                            <hr>
-                                <label>Summary of Key Information for Company:   {{ company_selected }}</label>
-                            <hr>
                             <div class="financial-data-table">
                                 {{ financial_data_table | safe }}
                             </div>

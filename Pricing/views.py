@@ -838,6 +838,8 @@ def industry_reports(request, game_id):
 
     # Save the updated curr_pos in the session
     request.session['curr_pos'] = curr_pos
+    if request.session.get('selected_year', 0) != selected_year:
+        curr_pos = 0
 
     # Find the position of default_player_id
     default_pos = player_id_list.index(default_player_id)
@@ -869,6 +871,7 @@ def industry_reports(request, game_id):
     if unique_years:  # Proceed if there are any financial years available
         if selected_year not in unique_years:
             selected_year = unique_years[0]
+        request.session['selected_year'] = selected_year
         # Create a DataFrame for the total view, excluding 'capital_test' and 'capital_ratio'
         industry_data = Industry.objects.filter(game_id=game, year=selected_year).values('year').annotate(
             written_premium=Sum('written_premium'),

@@ -6,13 +6,13 @@ import pandas as pd
 import decimal
 from .utils import reverse_pv_index, calculate_growth_rate, calculate_avg_profit, calculate_future_value, perform_logistic_regression, perform_logistic_regression_indication
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, Http404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
-from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum
+from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum, Exists
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
 from .forms import GamePrefsForm
@@ -163,9 +163,8 @@ def individual(request):
 def group(request):
     title = 'Insurance Pricing Game: Game List'
     template_name = 'Pricing/group.html'
-    context = dict()
     user = request.user
-
+    context = dict()
     all_games_annotated = IndivGames.objects.annotate(
         game_type=Case(
             When(human_player_cnt=1, then=Value('individual')),
@@ -183,13 +182,13 @@ def group(request):
     ).order_by('-timestamp').annotate(
         current_human_player_cnt=Count(
             'players',
-            filter=Q(players__profile='group'))
+            filter=Q(players__player_type='user'))
     )
 
     accessible_games = accessible_games.annotate(
         current_human_player_cnt=Count(
             'players',
-            filter=Q(players__profile='group')))
+            filter=Q(players__player_type='user')))
 
     for game in accessible_games:
         game.additional_players_needed = game.human_player_cnt - game.current_human_player_cnt
@@ -197,6 +196,17 @@ def group(request):
     if request.method == 'POST':
         form = GamePrefsForm(request.POST)
         if form.is_valid():
+            total_companies = sum(int(form.cleaned_data[field]) for field in ['human_player_cnt', 'sel_type_01', 'sel_type_02', 'sel_type_03'])
+            human_companies = sum(int(form.cleaned_data[field]) for field in ['human_player_cnt'])
+            if human_companies < 2:
+                messages.warning(request, "You must select at least two human players.")
+                context['form'] = form
+                return render(request, template_name, context)
+            if total_companies < 6:
+                messages.warning(request, "You must select at least 6 companies in total (including humans).")
+                context['form'] = form
+                return render(request, template_name, context)
+
             game_prefs, created = GamePrefs.objects.update_or_create(
                 user=user,
                 defaults={
@@ -205,6 +215,7 @@ def group(request):
                     'sel_type_02': form.cleaned_data['sel_type_02'],
                     'sel_type_03': form.cleaned_data['sel_type_03'],
                     'game_observable': form.cleaned_data['game_observable'],
+                    'default_selection_type': form.cleaned_data['default_selection_type'],
                 }
             )
 
@@ -222,6 +233,14 @@ def group(request):
                 game_observable=game_prefs.game_observable,
             )
 
+            user_profile = form.cleaned_data['default_selection_type']
+            if user_profile == 'Balanced':
+                profile_type = 'balanced'
+            elif user_profile == 'Growth':
+                profile_type = 'growth'
+            elif user_profile == 'Profit':
+                profile_type = 'profitability'
+
             next_player_id = 0
             Players.objects.update_or_create(
                 game=game,
@@ -229,7 +248,7 @@ def group(request):
                 player_name=str(request.user),
                 player_id_display=next_player_id,
                 player_type='user',
-                profile='group',
+                profile=profile_type,
             )
 
             next_player_id += 1
@@ -296,7 +315,7 @@ def game_list(request):
     all_games = all_games.annotate(
         current_human_player_cnt=Count(
             'players',
-            filter=Q(players__profile='group')))
+            filter=Q(players__player_type='user')))
 
     for game in all_games:
         game.additional_players_needed = game.human_player_cnt - game.current_human_player_cnt
@@ -323,12 +342,13 @@ def game_list(request):
 def join_group_game(request, game_id):
     title = 'Insurance Pricing Game: Join Group Game'
     template_name = 'Pricing/join_group_game.html'
-    context = dict()
     user = request.user
 
     game = get_object_or_404(IndivGames, game_id=game_id)
 
-    current_players = Players.objects.filter(game=game, player_type__in=['user', 'human']).count()
+    current_players = Players.objects.filter(game=game, player_type__in=['user']).count()
+    initiator_name = IndivGames.objects.filter(game_id=game_id).first().initiator
+    profile = Players.objects.filter(game=game_id, player_name=initiator_name).first().profile
     game.additional_players_needed = game.human_player_cnt - current_players
 
     if game.status in ['active', 'running', 'completed'] or \
@@ -338,7 +358,7 @@ def join_group_game(request, game_id):
 
     if request.method == "POST":
         if request.POST.get('Back to Group Game Select') == 'Back to Group Game Select':
-            redirect('Pricing-group')
+            return redirect('Pricing-group')
         if request.POST.get('Confirm Game Join'):
             max_display_id = Players.objects.filter(game=game).aggregate(Max('player_id_display'))[
                 'player_id_display__max']
@@ -350,17 +370,18 @@ def join_group_game(request, game_id):
                 player_id=request.user,
                 player_name=request.user.username,
                 player_id_display=next_display_id,
-                player_type='human',  # Or 'user', based on your requirements
-                profile='group'
+                player_type='user',  # Or 'user', based on your requirements
+                profile=profile
             )
 
-            current_players = Players.objects.filter(game=game, player_type__in=['user', 'human']).count()
+            current_players = Players.objects.filter(game=game, player_type__in=['user']).count()
             if current_players >= game.human_player_cnt:
                 game.status = 'active'
                 game.save()
 
             messages.success(request, "Successfully added to group game.")
             return redirect('Pricing-game_list')
+    context = dict()
     context['game'] = game
     return render(request, template_name, context)
 
@@ -399,8 +420,14 @@ def observe(request):
 @login_required()
 def game_dashboard(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
     decisions_obj = Decisions.objects.filter(game_id=game, player_id=user)
 
     unique_years = decisions_obj.order_by('-year').values_list('year', flat=True).distinct()
@@ -448,8 +475,14 @@ def game_dashboard(request, game_id):
 @login_required()
 def mktgsales_report(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
 
     financial_data = MktgSales.objects.filter(game_id=game, player_id=user)
     unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()
@@ -647,8 +680,16 @@ def mktgsales_report(request, game_id):
 @login_required()
 def financials_report(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
+
 
     financial_data = Financials.objects.filter(game_id=game, player_id=user)
     unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()
@@ -788,8 +829,15 @@ def financials_report(request, game_id):
 @login_required()
 def industry_reports(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
+
 
     # Check for 'Back to Game Select' POST request
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
@@ -821,6 +869,8 @@ def industry_reports(request, game_id):
     default_player_id = None
     player_id_list = []
     player_list = []
+    distinct_players.remove(request.user.username)
+    distinct_players.insert(0, request.user.username)
     for count_id, unique_player in enumerate(distinct_players):
         player_name = f"{unique_player}"
         if unique_player == request.user.username:
@@ -1037,8 +1087,14 @@ def industry_reports(request, game_id):
 @login_required()
 def valuation_report(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
 
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
@@ -1066,6 +1122,8 @@ def valuation_report(request, game_id):
     default_player_id = None
     player_id_list = []
     player_list = []
+    distinct_players.remove(request.user.username)
+    distinct_players.insert(0, request.user.username)
     for count_id, unique_player in enumerate(distinct_players):
         # player_name = f"{1 + count_id:02d} - {unique_player}"
         player_name = f"{unique_player}"
@@ -1254,8 +1312,14 @@ def valuation_report(request, game_id):
 @login_required()
 def claim_devl_report(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
 
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
@@ -1399,8 +1463,14 @@ def claim_devl_report(request, game_id):
 @login_required()
 def claim_trend_report(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
 
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
@@ -1669,8 +1739,14 @@ def claim_trend_report(request, game_id):
 @login_required()
 def decision_input(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
 
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
@@ -2016,8 +2092,14 @@ def decision_input(request, game_id):
 @login_required
 def decision_confirm(request, game_id):
     user = request.user
-    game = get_object_or_404(IndivGames,
-                             Q(game_id=game_id, initiator=user) | Q(game_id=game_id, game_observable=True))
+    game = get_object_or_404(IndivGames, Q(game_id=game_id))
+    players_list = game.players.all()
+    human_players = []
+    for player in players_list:
+        if player.player_type == 'user':
+            human_players.append(player.player_name)
+    if game.game_observable is False and user.username not in human_players:
+        raise Http404("You are not permitted to view the game.")
 
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)

@@ -10,6 +10,7 @@ from .models import GamePrefs
 class GamePrefsForm(forms.ModelForm):
 
     CHOICES = [(i, str(i)) for i in range(CONFIG_MAX_TYPES + 1)]
+    HUMAN_CHOICES = [(i, str(i)) for i in range(2, CONFIG_MAX_TYPES + 1)]
 
     def __init__(self, *args, **kwargs):
         super(GamePrefsForm, self).__init__(*args, **kwargs)
@@ -22,7 +23,7 @@ class GamePrefsForm(forms.ModelForm):
         self.fields['sel_type_02'].initial = 3 # int(np.random.normal(mean_val, std_dev))
         self.fields['sel_type_03'].initial = 4 # int(np.random.normal(mean_val, std_dev))
 
-    human_player_cnt = forms.ChoiceField(choices=CHOICES, label="Human Players:", required=False)
+    human_player_cnt = forms.ChoiceField(choices=HUMAN_CHOICES, label="Human Players:", required=False)
     sel_type_01 = forms.ChoiceField(choices=CHOICES, label="CPU w Growth profile:")
     sel_type_02 = forms.ChoiceField(choices=CHOICES, label="CPU w Profitability profile:")
     sel_type_03 = forms.ChoiceField(choices=CHOICES, label="CPU w Balanced profile:")

@@ -4,7 +4,6 @@
 {% block content %}
         <main class="page landing-page">
             <section class="clean-block clean-info dark">
-                <div class="container">
                     <div class="block-heading">
                         <h3 class="text-info">Join a pending group game:</h3>
                         <ul id="accessible-games-list" style="list-style-type: none;">
@@ -22,7 +21,7 @@
                         {% endfor %}
                     </ul>
                     </div>
-                </div>
+
             </section>
             <section class="clean-block clean-form dark">
                 <div class="container">
@@ -66,7 +65,13 @@
                                         {{ form.game_observable }}
                                     </div>
                                 </div>
-
+                                <br/>
+                                <div class="form-group" style="text-align: left; display: flex; align-items: center;">
+                                    <label for="{{ form.default_selection_type.id_for_label }}" style="flex: 1;">{{ form.default_selection_type.label }}</label>
+                                    <div style="flex: 1; text-align: right;">
+                                        {{ form.default_selection_type }}
+                                    </div>
+                                </div>
                                 <br/>
                                 <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Game Select" value="Back to Game Select"></input>
                                 <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Initiate Group Game" value="Initiate Group Game"></input>

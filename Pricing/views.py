@@ -830,16 +830,17 @@ def industry_reports(request, game_id):
 
     max_pos = max(len(player_id_list) - 4, 0)
 
+    # Save the updated curr_pos in the session
+    if request.session.get('selected_year', 0) != selected_year:
+        curr_pos = 0
+
     # Update curr_pos based on Next and Last buttons
     if request.POST.get('Next') == 'Next':
         curr_pos = min(curr_pos + 1, max_pos)
     if request.POST.get('Last') == 'Last':
         curr_pos = max(curr_pos - 1, 0)
 
-    # Save the updated curr_pos in the session
     request.session['curr_pos'] = curr_pos
-    if request.session.get('selected_year', 0) != selected_year:
-        curr_pos = 0
 
     # Find the position of default_player_id
     default_pos = player_id_list.index(default_player_id)
@@ -1049,6 +1050,63 @@ def valuation_report(request, game_id):
     template_name = 'Pricing/valuation_report.html'
 
     valuation_data = Valuation.objects.filter(game_id=game)
+    ordered_data = valuation_data.order_by('id', 'player_name')
+
+    # Keep track of the players you've already seen
+    seen_players = set()
+    distinct_players = []
+
+    # Iterate over the ordered queryset
+    for entry in ordered_data:
+        player_name = entry.player_name
+        if player_name not in seen_players:
+            distinct_players.append(player_name)
+            seen_players.add(player_name)
+
+    default_player_id = None
+    player_id_list = []
+    player_list = []
+    for count_id, unique_player in enumerate(distinct_players):
+        # player_name = f"{1 + count_id:02d} - {unique_player}"
+        player_name = f"{unique_player}"
+        if unique_player == request.user.username:
+            default_player_id = count_id
+        player_list.append(player_name)
+        player_id_list.append(count_id)
+
+    max_pos = max(len(player_id_list) - 4, 0)
+
+    if request.session.get('selected_year', 0) != selected_year:
+        curr_pos = 0
+
+    # Update curr_pos based on Next and Last buttons
+    if request.POST.get('Next') == 'Next':
+        curr_pos = min(curr_pos + 1, max_pos)
+    if request.POST.get('Last') == 'Last':
+        curr_pos = max(curr_pos - 1, 0)
+
+    # Save the updated curr_pos in the session
+    request.session['curr_pos'] = curr_pos
+
+    # Find the position of default_player_id
+    default_pos = player_id_list.index(default_player_id)
+
+    # Calculate the starting position for displayed_players
+    # It should always start with default_player_id and show next 3 players in the list
+    start_pos = max(default_pos + curr_pos, 0)
+    end_pos = min(start_pos + 4, len(player_id_list))
+
+    # Build the displayed players list starting with default_player_id
+    displayed_players = [default_player_id] + player_id_list[start_pos + 1:end_pos]
+
+    # If the list is shorter than 4, pad it with the next available players
+    while len(displayed_players) < 4 and end_pos < len(player_id_list):
+        displayed_players.append(player_id_list[end_pos])
+        end_pos += 1
+
+    # Prepare the data for displayed companies (assuming player_list is a dictionary or list)
+    companies = [player_list[player_id] for player_id in displayed_players]
+
     unique_years = valuation_data.order_by('-year').values_list('year', flat=True).distinct()
     if unique_years:  # Proceed if there are any financial years available
         valuation_data_list = list(valuation_data.values('id', 'player_name', 'year', 'in_force', 'beg_in_force',
@@ -1061,66 +1119,13 @@ def valuation_report(request, game_id):
         if not val_df.empty:
             if selected_year not in unique_years:
                 selected_year = unique_years[0]
+            request.session['selected_year'] = selected_year
             val_df = val_df[val_df['year'] <= selected_year]
             val_df = val_df.sort_values(by=['player_name', 'year'])
             all_data_years = val_df['year'].unique()  # Get all unique years
             latest_year = all_data_years.max()
             earliest_year = max((latest_year - 10 + 1), all_data_years.min())
             valuation_period = f'Utilizing estimates from period: {earliest_year} - {latest_year} '
-
-            ordered_data = valuation_data.order_by('id', 'player_name')
-
-            # Keep track of the players you've already seen
-            seen_players = set()
-            distinct_players = []
-
-            # Iterate over the ordered queryset
-            for entry in ordered_data:
-                player_name = entry.player_name
-                if player_name not in seen_players:
-                    distinct_players.append(player_name)
-                    seen_players.add(player_name)
-
-            default_player_id = None
-            player_id_list = []
-            player_list = []
-            for count_id, unique_player in enumerate(distinct_players):
-                # player_name = f"{1 + count_id:02d} - {unique_player}"
-                player_name = f"{unique_player}"
-                if unique_player == request.user.username:
-                    default_player_id = count_id
-                player_list.append(player_name)
-                player_id_list.append(count_id)
-
-            max_pos = max(len(player_id_list) - 4, 0)
-
-            # Update curr_pos based on Next and Last buttons
-            if request.POST.get('Next') == 'Next':
-                curr_pos = min(curr_pos + 1, max_pos)
-            if request.POST.get('Last') == 'Last':
-                curr_pos = max(curr_pos - 1, 0)
-
-            # Save the updated curr_pos in the session
-            request.session['curr_pos'] = curr_pos
-
-            # Find the position of default_player_id
-            default_pos = player_id_list.index(default_player_id)
-
-            # Calculate the starting position for displayed_players
-            # It should always start with default_player_id and show next 3 players in the list
-            start_pos = max(default_pos + curr_pos, 0)
-            end_pos = min(start_pos + 4, len(player_id_list))
-
-            # Build the displayed players list starting with default_player_id
-            displayed_players = [default_player_id] + player_id_list[start_pos + 1:end_pos]
-
-            # If the list is shorter than 4, pad it with the next available players
-            while len(displayed_players) < 4 and end_pos < len(player_id_list):
-                displayed_players.append(player_id_list[end_pos])
-                end_pos += 1
-
-            # Prepare the data for displayed companies (assuming player_list is a dictionary or list)
-            companies = [player_list[player_id] for player_id in displayed_players]
 
             # print(f'companies: {companies} max_pos: {max_pos} curr_pos: {curr_pos}  default_pos: {default_pos}  start_pos: {start_pos}  displayed: {displayed_players}')
             val_df = val_df.groupby('player_name').apply(reverse_pv_index).reset_index(drop=True)

@@ -8,7 +8,7 @@
                 <p>Individual games will add computer generated archetypes as competitors.  Group games can be formed from a combination of individual and computer participants. Select Re-Join to connect to a prior game in progress.  Finally, you can observe the game of another player.</p>
                 <form action="." method="POST">
                     {% csrf_token %}
-                    <input class="btn btn-outline-light btn-lg action-button" type="Submit" name="Individual" value="Individual"></input>
+                    <input class="btn btn-outline-light btn-lg action-button" type="Submit" name="Individual" value="Individual" disabled></input>
                     <input class="btn btn-outline-light btn-lg action-button" type="Submit" name="Group" value="Group"></input>
                     <input class="btn btn-outline-light btn-lg action-button" type="Submit" name="Re-Join" value="Re-Join"></input>
                     <input class="btn btn-outline-light btn-lg action-button" type="Submit" name="Observe" value="Observe" disabled></input>

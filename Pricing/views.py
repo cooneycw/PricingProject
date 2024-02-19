@@ -459,6 +459,8 @@ def game_dashboard(request, game_id):
 
     template_name = 'Pricing/dashboard.html'
     green_list = ['Government officials', 'Injury reform', 'product reform', 'after observing']
+    orange_list = ['Regulatory']
+    purple_list = ['OSFI']
 
     context = {
         'title': ' - Dashboard',
@@ -466,7 +468,9 @@ def game_dashboard(request, game_id):
         'current_datetime': current_datetime,
         'target_datetime': target_datetime,
         'decisions_frozen': decisions_frozen,
-        'green_list': green_list
+        'green_list': green_list,
+        'orange_list': orange_list,
+        'purple_list': purple_list,
     }
 
     return render(request, template_name, context)
@@ -2106,10 +2110,24 @@ def decision_confirm(request, game_id):
         raise Http404("You are not permitted to view the game.")
 
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
+        # Release the lock
+        try:
+            Lock.release_lock(game_id, request.user)
+            del request.session['locked_game_id']
+        except:
+            pass
+
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
     if request.POST.get('Return to Indication') == 'Return to Indication':
         request.session['ret_from_confirm'] = True
+        # Release the lock
+        try:
+            Lock.release_lock(game_id, request.user)
+            del request.session['locked_game_id']
+        except:
+            pass
+
         return redirect('Pricing-decision_input', game_id=game_id)
 
     selected_year = request.session.get('selected_year', 0)
@@ -2132,14 +2150,19 @@ def decision_confirm(request, game_id):
         froze_lock = True
 
     if request.POST.get('Confirm Decisions') == 'Confirm Decisions':
+        if decision_obj.decisions_locked is True:
+            messages.warning(request, f'Decisions already submitted for year: {decision_obj.year}')
+            return redirect('Pricing-game_dashboard', game_id=game_id)
         request.session['ret_from_confirm'] = False
         decision_obj.decisions_locked = True
         decision_obj.save()
-        game_id = request.session.get('locked_game_id')
-        if game_id:
-            # Release the lock
+
+        # Release the lock
+        try:
             Lock.release_lock(game_id, request.user)
             del request.session['locked_game_id']
+        except:
+            pass
         messages.success(request, f'Decisions submitted for year: {decision_obj.year}')
         message = ChatMessage(
             from_user=None,

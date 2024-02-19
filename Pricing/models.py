@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.conf import settings
 
 
 class GamePrefs(models.Model):
@@ -172,27 +173,35 @@ class ChatMessage(models.Model):
 
 
 class Lock(models.Model):
-    lock_id = models.CharField(max_length=255, unique=True)
+    lock_id = models.CharField(max_length=255)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        unique_together = ('lock_id', 'user')
+
     @staticmethod
-    def acquire_lock(lock_id, lock_timeout=60):
+    def acquire_lock(lock_id, user, lock_timeout=60):
+        # Construct a unique lock identifier based on game_id and user
+        unique_lock_id = f"{lock_id}_user_{user.pk}"
+
         # Check for existing lock
         current_time = timezone.now()
         expiry_time = current_time - timezone.timedelta(seconds=lock_timeout)
 
-        existing_lock = Lock.objects.filter(lock_id=lock_id, created_at__gt=expiry_time).first()
+        existing_lock = Lock.objects.filter(lock_id=unique_lock_id, created_at__gt=expiry_time).first()
         if existing_lock is not None:
             # Lock exists and has not expired
             return False
 
         # Clean up expired locks
-        Lock.objects.filter(lock_id=lock_id, created_at__lte=expiry_time).delete()
+        Lock.objects.filter(lock_id=unique_lock_id, created_at__lte=expiry_time).delete()
 
         # Acquire new lock
-        Lock.objects.create(lock_id=lock_id)
+        Lock.objects.create(lock_id=unique_lock_id, user=user)
         return True
 
     @staticmethod
-    def release_lock(lock_id):
-        Lock.objects.filter(lock_id=lock_id).delete()
+    def release_lock(lock_id, user):
+        unique_lock_id = f"{lock_id}_user_{user.pk}"
+        Lock.objects.filter(lock_id=unique_lock_id).delete()

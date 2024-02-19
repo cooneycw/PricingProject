@@ -28,7 +28,7 @@ print(f'BASE_DIR is {BASE_DIR}')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 IPADD = socket.gethostbyname(socket.gethostname())
-ec2 = True
+ec2 = False
 #if IPADD in ('192.168.5.72', '127.0.1.1', '127.0.0.1') or DEV == 'True':
 #    ec2 = False
 

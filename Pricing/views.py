@@ -14,9 +14,9 @@ from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum, Exists
 from datetime import timedelta
-from PricingProject.settings import CONFIG_FRESH_PREFS, CONFIG_MAX_HUMAN_PLAYERS
+from PricingProject.settings import CONFIG_FRESH_PREFS
 from .forms import GamePrefsForm
-from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Triangles, ClaimTrends, Indications, Decisions, ChatMessage
+from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Industry, Valuation, Triangles, ClaimTrends, Indications, Decisions, ChatMessage, Lock
 pd.set_option('display.max_columns', None)  # None means show all columns
 
 
@@ -2029,14 +2029,18 @@ def decision_input(request, game_id):
                 if test_prem != indicated_prem:
                     messages.warning(request, "Premium re-calculated due to changed parameters.  Please review and submit again.")
                 else:
-                    decision_obj.sel_profit_margin = int(sel_profit_margin)
-                    decision_obj.sel_exp_ratio_mktg = int(sel_mktg_expense)
-                    decision_obj.sel_loss_trend_margin = int(sel_loss_margin)
-                    decision_obj.sel_avg_prem = indicated_prem
-                    decision_obj.save()
-                    request.session['indicated_prem'] = indicated_prem
-                    request.session['selected_year'] = selected_year
-                    return redirect('Pricing-decision_confirm', game_id=game_id)
+                    if not Lock.acquire_lock(game_id, request.user):
+                        messages.warning(request, "Another team-member is in the submission page.  Cannot submit.")
+                    else:
+                        decision_obj.sel_profit_margin = int(sel_profit_margin)
+                        decision_obj.sel_exp_ratio_mktg = int(sel_mktg_expense)
+                        decision_obj.sel_loss_trend_margin = int(sel_loss_margin)
+                        decision_obj.sel_avg_prem = indicated_prem
+                        decision_obj.save()
+                        request.session['locked_game_id'] = game_id
+                        request.session['indicated_prem'] = indicated_prem
+                        request.session['selected_year'] = selected_year
+                        return redirect('Pricing-decision_confirm', game_id=game_id)
             request.session['indicated_prem'] = indicated_prem
             display_df_fmt.iloc[wtd_ind + 6, 0] = f'${current_prem:,.2f}'
             if current_prem != 0:
@@ -2131,7 +2135,19 @@ def decision_confirm(request, game_id):
         request.session['ret_from_confirm'] = False
         decision_obj.decisions_locked = True
         decision_obj.save()
+        game_id = request.session.get('locked_game_id')
+        if game_id:
+            # Release the lock
+            Lock.release_lock(game_id, request.user)
+            del request.session['locked_game_id']
         messages.success(request, f'Decisions submitted for year: {decision_obj.year}')
+        message = ChatMessage(
+            from_user=None,
+            game_id=IndivGames.objects.get(game_id=game_id),
+            content=f'Regulatory filing for {request.user} approved.',
+        )
+        message.save()
+
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
     template_name = 'Pricing/decision_confirm.html'

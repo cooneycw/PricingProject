@@ -11,13 +11,14 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 import socket
 import ast
+import os
 from pathlib import Path
 from .secrets import get_secrets, DEV
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+print(f'BASE_DIR is {BASE_DIR}')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
@@ -28,15 +29,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: don't run with debug turned on in production!
 IPADD = socket.gethostbyname(socket.gethostname())
 ec2 = True
-if IPADD in ('192.168.5.62', '127.0.1.1', '127.0.0.1') or DEV == 'True':
-    ec2 = False
+#if IPADD in ('192.168.5.72', '127.0.1.1', '127.0.0.1') or DEV == 'True':
+#    ec2 = False
 
 if ec2:
     DEBUG = False
     BASE_URL = 'https://essent.ai'
 else:
-    DEBUG = True
-    BASE_URL = 'http://127.0.0.1:8080'
+    DEBUG = True # was True
+    BASE_URL = 'http://127.0.0.1:8000'
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
+print(f'DEBUG: {DEBUG}  STATIC_ROOT: {STATIC_ROOT}')
 
 print(f'EC2 environment: {ec2}  Ip address:{IPADD}  Dev: {DEV}')
 
@@ -52,11 +56,11 @@ if DEBUG:
     POSTGRES_PORT = secret_dict['POSTGRES_PORT_DEV']
     POSTGRES_HOST = secret_dict['POSTGRES_HOST_DEV']
 
-ALLOWED_HOSTS = ['127.0.0.1', 'essent.ai']
+ALLOWED_HOSTS = ['127.0.0.1', 'essent.ai', 'www.essent.ai']
 
 # CSRF_TRUSTED_ORIGINS = ["https://the6ixclan.ca"]
 if DEBUG:
-    CSRF_TRUSTED_ORIGINS = ["https://essent.ai", "http://essent.ai", "http://localhost:8080", "http://127.0.0.1:8080"]
+    CSRF_TRUSTED_ORIGINS = ["https://essent.ai", "http://essent.ai", "http://localhost:8000", "http://127.0.0.1:8000"]
 else:
     CSRF_TRUSTED_ORIGINS = ["https://essent.ai", "http://essent.ai"]
 
@@ -168,15 +172,14 @@ CRISPY_TEMPLATE_PACK = 'bootstrap4'
 
 LOGIN_REDIRECT_URL = 'Pricing-home'
 LOGIN_URL = 'login'
-STATIC_URL = 'static/'
-
+STATIC_URL = '/static/'
+print(f'STATIC_URL: {STATIC_URL}')
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CONFIG_MAX_TYPES = 10
-CONFIG_MAX_HUMAN_PLAYERS = 8
 CONFIG_AVG_PLAYERS = 5
 CONFIG_STD_DEV = 2 / 5
 CONFIG_OBSERVABLE = False

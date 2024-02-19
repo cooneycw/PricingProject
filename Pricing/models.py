@@ -169,3 +169,30 @@ class ChatMessage(models.Model):
 
     class Meta:
         ordering = ['-sequence_number']  # Negative sign to order by descending
+
+
+class Lock(models.Model):
+    lock_id = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @staticmethod
+    def acquire_lock(lock_id, lock_timeout=60):
+        # Check for existing lock
+        current_time = timezone.now()
+        expiry_time = current_time - timezone.timedelta(seconds=lock_timeout)
+
+        existing_lock = Lock.objects.filter(lock_id=lock_id, created_at__gt=expiry_time).first()
+        if existing_lock is not None:
+            # Lock exists and has not expired
+            return False
+
+        # Clean up expired locks
+        Lock.objects.filter(lock_id=lock_id, created_at__lte=expiry_time).delete()
+
+        # Acquire new lock
+        Lock.objects.create(lock_id=lock_id)
+        return True
+
+    @staticmethod
+    def release_lock(lock_id):
+        Lock.objects.filter(lock_id=lock_id).delete()

@@ -2035,6 +2035,7 @@ def decision_input(request, game_id):
                 else:
                     if not Lock.acquire_lock(game_id, request.user):
                         messages.warning(request, "Another team-member is in the submission page.  Cannot submit.")
+                        return redirect('Pricing-game_dashboard', game_id=game_id)
                     else:
                         decision_obj.sel_profit_margin = int(sel_profit_margin)
                         decision_obj.sel_exp_ratio_mktg = int(sel_mktg_expense)

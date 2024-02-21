@@ -1186,7 +1186,7 @@ def valuation_report(request, game_id):
             val_df = val_df.sort_values(by=['player_name', 'year'])
             all_data_years = val_df['year'].unique()  # Get all unique years
             latest_year = all_data_years.max()
-            earliest_year = max((latest_year - 10 + 1), all_data_years.min())
+            earliest_year = max((latest_year - 20 + 1), all_data_years.min())
             valuation_period = f'Utilizing estimates from period: {earliest_year} - {latest_year} '
 
             # print(f'companies: {companies} max_pos: {max_pos} curr_pos: {curr_pos}  default_pos: {default_pos}  start_pos: {start_pos}  displayed: {displayed_players}')

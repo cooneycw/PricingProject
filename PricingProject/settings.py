@@ -34,7 +34,7 @@ ec2 = True
 
 if ec2:
     DEBUG = False
-    BASE_URL = 'https://essent.ai'
+    BASE_URL = 'https://pricinggame.ca'
 else:
     DEBUG = True # was True
     BASE_URL = 'http://127.0.0.1:8000'
@@ -56,13 +56,13 @@ if DEBUG:
     POSTGRES_PORT = secret_dict['POSTGRES_PORT_DEV']
     POSTGRES_HOST = secret_dict['POSTGRES_HOST_DEV']
 
-ALLOWED_HOSTS = ['127.0.0.1', 'essent.ai', 'www.essent.ai']
+ALLOWED_HOSTS = ['127.0.0.1', 'pricinggame.ca', 'www.pricinggame.ca']
 
 # CSRF_TRUSTED_ORIGINS = ["https://the6ixclan.ca"]
 if DEBUG:
-    CSRF_TRUSTED_ORIGINS = ["https://essent.ai", "http://essent.ai", "http://localhost:8000", "http://127.0.0.1:8000"]
+    CSRF_TRUSTED_ORIGINS = ["https://pricinggame.ca", "http://pricinggame.ca", "http://localhost:8000", "http://127.0.0.1:8000"]
 else:
-    CSRF_TRUSTED_ORIGINS = ["https://essent.ai", "http://essent.ai"]
+    CSRF_TRUSTED_ORIGINS = ["https://pricinggame.ca", "http://pricinggame.ca"]
 
 # Application definition
 print('csrf')

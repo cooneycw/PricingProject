@@ -37,12 +37,12 @@
                                 <button id="toggleViewBtn" class="btn btn-outline-warning btn-sm">Show Chart</button>
                             </div>
                             <hr>
-                            <div class="mktgsales-data-table" style="{{ initial_table_style|default:'display: block;' }}">
+                            <div class="mktgsales-data-table" style="{{ initial_table_style|default:'display: block' }};">
                                 {{ financial_data_table|safe }}
                             </div>
-                            <div id="activityChart" style="{{ initial_chart_style|default:'display: none;' }}"></div>
-                            <div id="financialRatioChart" style="{{ initial_chart_style|default:'display: none;' }}; margin-top: 20px;"></div>
-                            <div id="ratiosChart" style="{{ initial_chart_style|default:'display: none;' }}; margin-top: 20px;"></div>
+                            <div id="activityChart" style="{{ initial_chart_style|default:'display: none' }};"></div>
+                            <div id="financialRatioChart" style="{{ initial_chart_style|default:'display: none' }}; margin-top: 20px;"></div>
+                            <div id="ratiosChart" style="{{ initial_chart_style|default:'display: none' }}; margin-top: 20px;"></div>
                         </div>
 
                 {% endif %}
@@ -107,6 +107,19 @@
              console.log('chart_data was None or empty in Django context, chartData will remain null.');
         }
 
+        // Placeholder for OSFI failure data - this should be populated from your Django view
+        // Example structure: {'2023': ['CompanyA', 'CompanyB'], '2022': ['CompanyC']}
+        let osfiFailureData = {}; 
+        const osfiDataElement = document.getElementById('osfiFailureDataJson');
+        if (osfiDataElement) {
+            try {
+                osfiFailureData = JSON.parse(osfiDataElement.textContent);
+            } catch (e) {
+                console.error('Error parsing osfi_failure_data from json_script:', e);
+                // Decide if you want to hide charts or just proceed without OSFI annotations
+            }
+        }
+
         function setButtonState(showChart) {
             if (toggleButton) {
                 if (showChart) {
@@ -144,12 +157,12 @@
             // Calculate max values for Y-axes - REORGANIZED
             const customersMaxChart1 = getAxisMax(chartData.customers);
             const avgPremiumMaxChart1 = getAxisMax(chartData.average_premium);
-            const cancellationsMaxChart1 = getAxisMax(chartData.cancellations);
+            // const cancellationsMaxChart1 = getAxisMax(chartData.cancellations); // No longer needed for chart 1
 
             const mktgSpendPercentMaxChart2 = getAxisMax(chartData.marketing_spend_percent_industry);
-            const quotesMaxChart2 = getAxisMax(chartData.quotes);
-            const salesMaxChart2 = getAxisMax(chartData.sales);
-            const activityCountsMaxChart2 = getAxisMax([...(chartData.quotes || []), ...(chartData.sales || [])]);
+            // const quotesMaxChart2 = getAxisMax(chartData.quotes); // Will be part of activityCountsMaxChart2
+            // const salesMaxChart2 = getAxisMax(chartData.sales); // Will be part of activityCountsMaxChart2
+            const activityCountsMaxChart2 = getAxisMax([...(chartData.quotes || []), ...(chartData.sales || []), ...(chartData.cancellations || [])]); // Added cancellations
 
             // Max values for Chart 3 (Ratios)
             const avgPremiumMaxChart3 = getAxisMax(chartData.average_premium);
@@ -169,18 +182,18 @@
                 group: 'mktgSalesCharts' // Synchronization group
             };
 
-            // --- Chart 1: Activity Metrics (Customers, Average Premium, Cancellations) ---
+            // --- Chart 1: Activity Metrics (Customers, Average Premium) ---
             var options1 = {
                 series: [{
                     name: 'Customers', type: 'line', data: chartData.customers
                 }, {
                     name: 'Average Premium', type: 'line', data: chartData.average_premium
-                }, {
+                }/*, { // Removed Cancellations
                     name: 'Cancellations', type: 'line', data: chartData.cancellations
-                }],
+                }*/],
                 chart: commonChartProps,
-                colors: ['#00E396', '#FF0000', '#5400E0'], // Green (Cust), Red (Avg Prem), Purple (Canx)
-                stroke: { width: [3, 3, 2], curve: 'smooth' },
+                colors: ['#00E396', '#FF0000'/*, '#5400E0'*/], // Green (Cust), Red (Avg Prem) - Removed Purple (Canx)
+                stroke: { width: [3, 3/*, 2*/], curve: 'smooth' }, // Removed width for Cancellations
                 title: { text: 'Customer & Financial Overview' },
                 xaxis: commonXAxis,
                 yaxis: [
@@ -199,7 +212,7 @@
                         labels: { formatter: function (value) { return value !== undefined && value !== null ? "$" + Math.round(value).toLocaleString() : ''; } },
                         tickAmount: 5,
                         max: avgPremiumMaxChart1
-                    },
+                    }/*, // Removed Y-axis for Cancellations
                     {
                         seriesName: 'Cancellations',
                         opposite: true,
@@ -209,7 +222,7 @@
                         min: 0,
                         max: cancellationsMaxChart1,
                         show: true
-                    }
+                    }*/
                 ],
                 legend: { show: true, position: 'bottom', horizontalAlign: 'center' },
                 tooltip: {
@@ -220,31 +233,33 @@
                             if (val === undefined || val === null) return 'N/A';
                             if (seriesName === 'Customers') return Math.round(val).toLocaleString() + " Customers";
                             if (seriesName === 'Average Premium') return "$" + Math.round(val).toLocaleString();
-                            if (seriesName === 'Cancellations') return Math.round(val).toLocaleString() + " Cancellations";
+                            // if (seriesName === 'Cancellations') return Math.round(val).toLocaleString() + " Cancellations"; // Removed
                             return Math.round(val).toLocaleString();
                         }
                     }
                 }
             };
 
-            // --- Chart 2: Marketing & Sales Activity (Mktg Spend %, Quotes, Sales) ---
+            // --- Chart 2: Marketing & Sales Activity (Mktg Spend %, Quotes, Sales, Cancellations) ---
             var options2 = {
                 series: [{
                     name: 'Mktg Spend (% of Industry)', type: 'column', data: chartData.marketing_spend_percent_industry
                 }, {
+                    name: 'Quotes', type: 'line', data: chartData.quotes
+                }, {
                     name: 'Sales', type: 'line', data: chartData.sales
                 }, {
-                    name: 'Quotes', type: 'line', data: chartData.quotes
+                    name: 'Cancellations', type: 'line', data: chartData.cancellations
                 }],
                 chart: commonChartProps,
-                colors: ['#008FFB', '#775DD0', '#FEB019'], // Blue (Mktg %), Purple (Sales), Orange (Quotes)
-                stroke: { width: [0, 3, 3], curve: 'smooth' }, 
+                colors: ['#008FFB', '#00E396', '#FF4560', '#FEB019'], // Mktg:Blue, Quotes:Green, Sales:Red, Canx:Orange
+                stroke: { width: [0, 3, 3, 2], curve: 'smooth' },
                 title: { text: 'Marketing & Sales Activity' },
                 xaxis: commonXAxis,
                 yaxis: [
                     {
-                        seriesName: ['Sales', 'Quotes'],
-                        title: { text: 'Sales / Quotes' },
+                        seriesName: ['Quotes', 'Sales', 'Cancellations'],
+                        title: { text: 'Quotes / Sales / Cancellations' },
                         labels: { formatter: function (value) { return value !== undefined && value !== null ? Math.round(value).toLocaleString() : ''; } },
                         tickAmount: 5,
                         min: 0,
@@ -267,13 +282,44 @@
                             const seriesName = w.globals.seriesNames[seriesIndex];
                             if (val === undefined || val === null) return 'N/A';
                             if (seriesName === 'Mktg Spend (% of Industry)') return val.toFixed(1) + "%";
-                            if (seriesName === 'Sales') return Math.round(val).toLocaleString() + " Sales";
                             if (seriesName === 'Quotes') return Math.round(val).toLocaleString() + " Quotes";
+                            if (seriesName === 'Sales') return Math.round(val).toLocaleString() + " Sales";
+                            if (seriesName === 'Cancellations') return Math.round(val).toLocaleString() + " Cancellations";
                             return Math.round(val).toLocaleString();
                         }
                     }
+                },
+                annotations: { // Added annotations for OSFI failures
+                    xaxis: [] // Will be populated dynamically
                 }
             };
+            
+            // Dynamically add OSFI failure annotations to options2
+            if (chartData && chartData.years && Object.keys(osfiFailureData).length > 0) {
+                chartData.years.forEach((year, index) => {
+                    if (osfiFailureData[year] && osfiFailureData[year].length > 0) {
+                        options2.annotations.xaxis.push({
+                            x: year, // Category name
+                            // y: 0, // Y-coordinate on the y-axis, adjust if needed
+                            borderColor: '#FF0000', // Red border for emphasis
+                            label: {
+                                borderColor: '#FF0000',
+                                style: {
+                                    color: '#fff', // White text
+                                    background: '#FF0000', // Red background
+                                    fontSize: '10px',
+                                    fontFamily: 'Arial, sans-serif',
+                                    cssClass: 'apexcharts-xaxis-annotation-label',
+                                },
+                                text: 'OSFI Failures: ' + osfiFailureData[year].join(', '),
+                                orientation: 'horizontal', // Ensure label is horizontal
+                                offsetY: 5, // Position below the x-axis line a bit more
+                                position: 'bottom'
+                            }
+                        });
+                    }
+                });
+            }
 
             // --- Chart 3: Ratio Analysis ---
             var options3 = {
@@ -356,10 +402,11 @@
                 Promise.all([chart1.render(), chart2.render(), chart3.render()]).then(() => { // Render chart3
                     console.log('All three charts rendered successfully.');
                     try {
-                        chart1.hideSeries('Cancellations');
+                        // chart1.hideSeries('Cancellations'); // Cancellations no longer in chart1
                         chart2.hideSeries('Sales');
+                        chart2.hideSeries('Cancellations'); // Hide Cancellations by default in Chart 2
                         // chart3.hideSeries('SeriesNameToHideByDefault'); // If any series in chart3 needs to be hidden by default
-                        console.log('Cancellations (Chart 1) and Sales (Chart 2) series hidden by default.');
+                        console.log('Sales and Cancellations (Chart 2) series hidden by default.');
                     } catch (e) {
                         console.error('Error hiding series by default:', e);
                     }

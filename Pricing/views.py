@@ -85,6 +85,7 @@ def individual(request):
                     'sel_type_03': form.cleaned_data['sel_type_03'],
                     'game_observable': form.cleaned_data['game_observable'],
                     'default_selection_type': form.cleaned_data['default_selection_type'],
+                    'game_difficulty': form.cleaned_data['game_difficulty'],  # Added game_difficulty
                 }
             )
 

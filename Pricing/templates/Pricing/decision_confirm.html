@@ -13,10 +13,10 @@
                     </form>
                 </div>
                     <div class="container">
-                        <div class="row">
-                            <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
+                        <div class="row d-flex">
+                            <div class="col-md-6 d-flex flex-column">
                                 <h5 style="font-weight: bold;color: #0a53be;">Indication Centre</h5>
-                                <div class="block-heading" style="font-family: 'Roboto Mono'; text-align:left; border:3px solid #000000; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                <div class="block-heading flex-grow-1" style="font-family: 'Roboto Mono'; text-align:left; border:3px solid #000000; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                     <!-- Insert Reports -->
                                     <div class="indic">
                                         <label for="regulatory" style="margin-right: 120px;">{{ mct_label }}</label>
@@ -40,13 +40,13 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-6"> <!-- Limit to 25% of the screen width -->
+                            <div class="col-md-6 d-flex flex-column">
                                 <h5 style="font-weight: bold;color: #0a53be">Decision Centre {% if osfi_alert %}(disabled due to regulatory intervention){% endif %}</h5>
                                 {% if not osfi_alert %}
-                                    <div class="block-heading" style="font-family: 'Roboto Mono'; text-align:left; border: 3px solid rgb(11,231,116); border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                    <div class="block-heading flex-grow-1" style="font-family: 'Roboto Mono'; text-align:left; border: 3px solid rgb(11,231,116); border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                 {% endif %}
                                 {% if osfi_alert %}
-                                    <div class="block-heading" style="text-align:left; border: 3px solid #ff0000; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                    <div class="block-heading flex-grow-1" style="text-align:left; border: 3px solid #ff0000; border-radius: 20px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                 {% endif %}
                                     <!-- Insert Reports -->
                                     <form method="POST" action="">
@@ -62,8 +62,10 @@
                                         {% if not is_novice_game %}
                                         <div class="decis">
                                             <label for="loss" style="margin-right: 18px;">Selected Loss Trend Margin (%):</label>
-                                            <span>{{ sel_loss_margin | safe}}</span>
+                                            <span>{{ sel_trend_loss_margin | safe}}</span>
                                         </div>
+                                        {% else %}
+                                        <div class="decis">&nbsp;</div>
                                         {% endif %}
 
                                         <div>

@@ -78,8 +78,8 @@
                                             <label for="loss" style="margin-right: 18px;">Selected Loss Trend Margin (%):</label>
                                             <div class="select-wrapper">
                                                 <select id="loss" name="loss" {% if froze_lock %}disabled{% endif %}>
-                                                {% for loss_margin in loss_margins %}
-                                                    <option value="{{ loss_margin }}" {% if sel_loss_margin == loss_margin %}selected{% endif %}>{{ loss_margin }}</option>
+                                                {% for trend_loss_margin in trend_loss_margins %}
+                                                    <option value="{{ trend_loss_margin }}" {% if sel_trend_loss_margin == trend_loss_margin %}selected{% endif %}>{{ trend_loss_margin }}</option>
                                                 {% endfor %}
                                                 </select>
                                             </div>

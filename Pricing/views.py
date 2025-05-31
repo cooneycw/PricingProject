@@ -1799,7 +1799,7 @@ def decision_input(request, game_id):
     mct_pass = None
     profit_margins = None
     mktg_expenses = None
-    loss_margins = None
+    trend_loss_margins = None
     osfi_alert = None
     current_prem = None
     indicated_prem = None
@@ -1826,10 +1826,10 @@ def decision_input(request, game_id):
     sel_mktg_expense = int(float(sel_mktg_expense) * 10) if sel_mktg_expense else None
 
     if not is_novice_game:
-        sel_loss_margin = request.POST.get('loss')
-        sel_loss_margin = int(float(sel_loss_margin) * 10) if sel_loss_margin else None
+        sel_trend_loss_margin = request.POST.get('loss')
+        sel_trend_loss_margin = int(float(sel_trend_loss_margin) * 10) if sel_trend_loss_margin else None
     else:
-        sel_loss_margin = 0  # Changed from 2 to 0 for Novice games
+        sel_trend_loss_margin = 0  # Changed from 2 to 0 for Novice games
 
     template_name = 'Pricing/decision_input.html'
 
@@ -1875,36 +1875,44 @@ def decision_input(request, game_id):
                 froze_lock = True
                 decisions_locked = True
 
-            # Use the actual min/max ranges from init_decisions, not the stored values
-            # These should be reasonable ranges like 4-10 for profit margin, 0-5 for marketing
-            profit_margins = [f"{x/10:.1f}" for x in range(40, 110, 10)]  # 4.0% to 10.0%
-            mktg_expenses = [f"{x/10:.1f}" for x in range(0, 60, 10)]     # 0.0% to 5.0%
+            # Use the actual min/max ranges from the database
+            # Get min/max values from decision object, but use sensible business minimums if database has 0
+            profit_min = getattr(decision_obj, 'sel_profit_margin_min', 40) or 40  # Use 4.0% minimum if db is 0
+            profit_max = getattr(decision_obj, 'sel_profit_margin_max', 110) or 110  # Default 11.0%
+            mktg_min = getattr(decision_obj, 'sel_exp_ratio_mktg_min', 0)  # 0.0% is valid for marketing
+            mktg_max = getattr(decision_obj, 'sel_exp_ratio_mktg_max', 60) or 60  # Default 6.0%
+            
+            if not is_novice_game:
+                trend_loss_min = getattr(decision_obj, 'sel_loss_trend_margin_min', -20)  # -2.0% is valid
+                trend_loss_max = getattr(decision_obj, 'sel_loss_trend_margin_max', 50) or 50  # Default 5.0%
+            
+            profit_margins = [f"{x/10:.1f}" for x in range(profit_min, profit_max, 2)]  # 0.2% steps
+            mktg_expenses = [f"{x/10:.1f}" for x in range(mktg_min, mktg_max, 2)]     # 0.2% steps
 
             if not is_novice_game:
-                loss_margins = [f"{x/10:.1f}" for x in range(-20, 50, 10)]  # -2.0% to 4.0%
+                trend_loss_margins = [f"{x/10:.1f}" for x in range(trend_loss_min, trend_loss_max, 2)]  # 0.2% steps
             else:
-
-                loss_margins = []
+                trend_loss_margins = []
             ret_from_confirm = request.session.get('ret_from_confirm', False)
             if ret_from_confirm is True or decisions_locked is True:
                 # Use stored values when returning from confirm or locked
                 last_profit_margin = decision_obj.sel_profit_margin
                 last_mktg_expense = decision_obj.sel_exp_ratio_mktg
                 if not is_novice_game:
-                    last_loss_margin = decision_obj.sel_loss_trend_margin
+                    last_trend_loss_margin = decision_obj.sel_loss_trend_margin
                 request.session['ret_from_confirm'] = False
             elif decision_obj_last:
                 # Use previous year's values as defaults
                 last_profit_margin = decision_obj_last.sel_profit_margin
                 last_mktg_expense = decision_obj_last.sel_exp_ratio_mktg
                 if not is_novice_game:
-                    last_loss_margin = decision_obj_last.sel_loss_trend_margin
+                    last_trend_loss_margin = decision_obj_last.sel_loss_trend_margin
             else:
                 # First year defaults
                 last_profit_margin = 7  # 7%
                 last_mktg_expense = 2   # 2%
                 if not is_novice_game:
-                    last_loss_margin = 2  # 2%
+                    last_trend_loss_margin = 2  # 2%
 
             # Set current selections
             if sel_profit_margin is None:
@@ -1913,10 +1921,10 @@ def decision_input(request, game_id):
             if sel_mktg_expense is None:
                 sel_mktg_expense = last_mktg_expense
             
-            if not is_novice_game and sel_loss_margin is None:
-                sel_loss_margin = last_loss_margin
+            if not is_novice_game and sel_trend_loss_margin is None:
+                sel_trend_loss_margin = last_trend_loss_margin
             elif is_novice_game:
-                sel_loss_margin = 0  # Changed from 2 to 0 for Novice games
+                sel_trend_loss_margin = 0  # Changed from 2 to 0 for Novice games
 
             if pass_capital_test == 'Pass':
                 mct_pass = '<span class="green-text"><b>' + pass_capital_test + '</b></span>'
@@ -1930,9 +1938,9 @@ def decision_input(request, game_id):
                     sel_profit_margin = 7
                 sel_mktg_expense = 0
                 if not is_novice_game:
-                    sel_loss_margin = 2
+                    sel_trend_loss_margin = 2
                 else:
-                    sel_loss_margin = 0  # Novice games get 0% even during OSFI intervention
+                    sel_trend_loss_margin = 0  # Novice games get 0% even during OSFI intervention
                 osfi_alert = True
                 froze_lock = True
 
@@ -2012,15 +2020,15 @@ def decision_input(request, game_id):
                         else:
                             display_df.iloc[i, n] = 0
                     lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
-                    est_values = perform_logistic_regression_indication(lcost, reform_fact, sel_loss_margin)
+                    est_values = perform_logistic_regression_indication(lcost, reform_fact, sel_trend_loss_margin)
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 elif categ == 'Trend Adj':
                     for o in range(len(acc_yrs)):
                         display_df.iloc[i, o] = est_values['trend'][o]
-                        if int(sel_loss_margin) > 0:
+                        if int(sel_trend_loss_margin) > 0:
                             prefix = '<span class="blue-text">'
                             postfix = '</span>'
-                        elif int(sel_loss_margin) < 0:
+                        elif int(sel_trend_loss_margin) < 0:
                             prefix = '<span class="red-text">'
                             postfix = '</span>'
                         else:
@@ -2077,7 +2085,7 @@ def decision_input(request, game_id):
                             decision_obj.sel_profit_margin = int(sel_profit_margin)
                             decision_obj.sel_exp_ratio_mktg = int(sel_mktg_expense)
                             if not is_novice_game:
-                                decision_obj.sel_loss_trend_margin = int(sel_loss_margin)
+                                decision_obj.sel_loss_trend_margin = int(sel_trend_loss_margin)
                             else:
                                 decision_obj.sel_loss_trend_margin = 0  # Changed from 2 to 0 for Novice games
                             decision_obj.sel_avg_prem = indicated_prem
@@ -2112,7 +2120,7 @@ def decision_input(request, game_id):
         financial_data_table = '<p>No financial data available.</p>'
 
     context = {
-        'title': ' - Indication / Decisions',
+        'title': ' - Decision Input',
         'game': game,
         'financial_data_table': financial_data_table,
         'has_financial_data': indication_obj.exists(),
@@ -2125,7 +2133,8 @@ def decision_input(request, game_id):
         'sel_profit_margin': f'{sel_profit_margin/10:.1f}',
         'mktg_expenses': mktg_expenses,
         'sel_mktg_expense': f'{sel_mktg_expense/10:.1f}',
-        'sel_loss_margin': f'{sel_loss_margin/10:.1f}' if not is_novice_game else None,
+        'trend_loss_margins': trend_loss_margins,
+        'sel_trend_loss_margin': f'{sel_trend_loss_margin/10:.1f}' if not is_novice_game else None,
         'froze_lock': froze_lock,
         'osfi_alert': osfi_alert,
         'decisions_locked': decisions_locked,
@@ -2249,7 +2258,7 @@ def decision_confirm(request, game_id):
         'indicated_prem': f'${final_avg_prem:,.2f}',
         'rate_chg': f'<span class="violet-text">{round(100 * rate_chg, 1):,.1f}% </span>',
         'sel_profit_margin': f'{decision_obj.sel_profit_margin/10:.1f}',
-        'sel_loss_margin': f'{decision_obj.sel_loss_trend_margin/10:.1f}',
+        'sel_trend_loss_margin': f'{decision_obj.sel_loss_trend_margin/10:.1f}',
         'sel_mktg_expense': f'{decision_obj.sel_exp_ratio_mktg/10:.1f}',
         'is_novice_game': is_novice_game,
     }

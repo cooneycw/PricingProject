@@ -19,52 +19,160 @@
                 {% endif %}
                 {% if has_financial_data %}
                         <div style="padding-left: 20px;  margin-bottom: 20px;"> <!-- Wrapper with padding for whitespace -->
-                            <form method="GET" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
-                                <div style="margin-right: 15px; width: 300px;"> <!-- Constrained width for the question text -->
-                                    <label for="year">Latest Year for Display:</label>
-                                </div>
-                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
-                                    <select id="year" name="year">
-                                        {% for year in unique_years %}
-                                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <input type="submit" value="Select">
-                            </form>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <form method="GET" action="" style="display: flex; align-items: center;">
+                                    <div style="margin-right: 15px; width: 300px;">
+                                        <label for="year">Latest Year for Display:</label>
+                                    </div>
+                                    <div style="margin-right: 15px; ">
+                                        <select id="year" name="year">
+                                            {% for year in unique_years %}
+                                                <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <input type="submit" value="Select" class="btn btn-primary btn-sm">
+                                </form>
+                                <button id="toggleViewBtn" class="btn btn-outline-warning btn-sm">Show Chart</button>
+                            </div>
                             <hr>
-                            <div class="financial-data-table">
+                            <div class="financial-data-table" style="{{ initial_table_style|default:'display: block' }};">
                                 {{ financial_data_table | safe }}
                             </div>
+                            <div id="financialsChart" style="{{ initial_chart_style|default:'display: none' }};"></div>
                         </div>
-
                 {% endif %}
             </div>
         </section>
     </main>
-<script>
+{% if has_financial_data %}
+    {{ chart_data|json_script:"chartDataJson" }}
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Select all table rows within the financial-data-table
+        // Table cell formatting (as before)
         var tableRows = document.querySelectorAll('.financial-data-table tr');
-
-        // Loop through each table row
         tableRows.forEach(function(row) {
-            // Select all th and td elements in the current row
             var cells = row.querySelectorAll('th, td');
-
-            // Loop through each cell
             cells.forEach(function(cell) {
-                // Check if the cell is empty
                 if(cell.innerHTML.trim() === '') {
-                    // If empty, insert a non-breaking space character
                     cell.innerHTML = '&nbsp;';
                 }
-
-                // Apply the monospaced font to each cell
-                cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
+                cell.style.fontFamily = "'Roboto Mono', monospace";
             });
         });
-    });
-</script>
 
+        // Toggle and Chart Logic
+        const toggleButton = document.getElementById('toggleViewBtn');
+        const tableContainer = document.querySelector('.financial-data-table');
+        const chartContainer = document.getElementById('financialsChart');
+
+        let isNoviceGame = false;
+        try {
+            isNoviceGame = JSON.parse("{{ is_novice_game|yesno:'true,false,null' }}");
+        } catch (e) {
+            isNoviceGame = false;
+        }
+
+        let chartData = null;
+        const chartDataElement = document.getElementById('chartDataJson');
+        if (chartDataElement) {
+            try {
+                chartData = JSON.parse(chartDataElement.textContent);
+            } catch (e) {
+                chartData = null;
+            }
+        }
+
+        function setButtonState(showChart) {
+            if (toggleButton) {
+                if (showChart) {
+                    toggleButton.textContent = 'Show Table';
+                    toggleButton.classList.remove('btn-outline-warning');
+                    toggleButton.classList.add('btn-primary');
+                } else {
+                    toggleButton.textContent = 'Show Chart';
+                    toggleButton.classList.remove('btn-primary');
+                    toggleButton.classList.add('btn-outline-warning');
+                }
+            }
+        }
+
+        function setViewVisibility(showChart) {
+            if (showChart) {
+                if (tableContainer) tableContainer.style.display = 'none';
+                if (chartContainer) chartContainer.style.display = 'block';
+            } else {
+                if (tableContainer) tableContainer.style.display = 'block';
+                if (chartContainer) chartContainer.style.display = 'none';
+            }
+            setButtonState(showChart);
+        }
+
+        // Initial state
+        setViewVisibility(isNoviceGame);
+
+        // Chart rendering
+        if (chartData && chartData.years && chartData.years.length > 0) {
+            var options = {
+                series: [
+                    { name: 'Written Premium', type: 'line', data: chartData.written_premium },
+                    { name: 'Capital', type: 'line', data: chartData.capital }
+                ],
+                chart: {
+                    height: 350,
+                    type: 'line',
+                    toolbar: { show: true }
+                },
+                colors: ['#008FFB', '#00E396'],
+                stroke: { width: [3, 3], curve: 'smooth' },
+                title: { text: 'Written Premium vs Capital (Last 20 Years)' },
+                xaxis: {
+                    categories: chartData.years,
+                    title: { text: 'Year' }
+                },
+                yaxis: [
+                    {
+                        seriesName: 'Written Premium',
+                        title: { text: 'Written Premium' },
+                        labels: { formatter: function (value) { return "$" + Math.round(value).toLocaleString(); } },
+                        tickAmount: 5,
+                        min: 0
+                    },
+                    {
+                        seriesName: 'Capital',
+                        opposite: true,
+                        title: { text: 'Capital' },
+                        labels: { formatter: function (value) { return "$" + Math.round(value).toLocaleString(); } },
+                        tickAmount: 5,
+                        min: 0
+                    }
+                ],
+                legend: { show: true, position: 'bottom', horizontalAlign: 'center' },
+                tooltip: {
+                    shared: true, intersect: false,
+                    y: {
+                        formatter: function (val, { seriesIndex, w }) {
+                            if (val === undefined || val === null) return 'N/A';
+                            return "$" + Math.round(val).toLocaleString();
+                        }
+                    }
+                }
+            };
+            var chart = new ApexCharts(chartContainer, options);
+            chart.render();
+        } else {
+            if (toggleButton) toggleButton.style.display = 'none';
+            if (chartContainer) chartContainer.style.display = 'none';
+        }
+
+        if (toggleButton) {
+            toggleButton.addEventListener('click', function() {
+                const isChartVisible = chartContainer && chartContainer.style.display === 'block';
+                setViewVisibility(!isChartVisible);
+            });
+        }
+    });
+    </script>
+{% endif %}
 {% endblock content %}

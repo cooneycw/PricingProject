@@ -803,6 +803,7 @@ def financials_report(request, game_id):
     if game.game_observable is False and user.username not in human_players:
         raise Http404("You are not permitted to view the game.")
 
+    financial_data_table = '<p>No financial data available.</p>'  # Ensure always defined
 
     financial_data = Financials.objects.filter(game_id=game, player_id=user)
     unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()
@@ -827,6 +828,24 @@ def financials_report(request, game_id):
         # Creating a DataFrame from the obtained data
         df = pd.DataFrame(financial_data_list)
 
+        # --- CHART DATA PREPARATION ---
+        chart_data = None
+        if not df.empty:
+            # Prepare chart data for the last 20 years (most recent on the left)
+            chart_years = sorted(df['year'].unique(), reverse=True)[:20]
+            chart_years = list(chart_years)
+            chart_years.sort(reverse=True)  # Most recent first (left side)
+            chart_df = df[df['year'].isin(chart_years)].copy()
+            chart_df = chart_df.sort_values('year', ascending=False)  # Most recent first
+            # Fill missing values with 0 for charting
+            chart_df['written_premium'] = pd.to_numeric(chart_df['written_premium'], errors='coerce').fillna(0)
+            chart_df['capital'] = pd.to_numeric(chart_df['capital'], errors='coerce').fillna(0)
+            chart_data = {
+                'years': chart_df['year'].tolist(),
+                'written_premium': chart_df['written_premium'].tolist(),
+                'capital': chart_df['capital'].tolist(),
+            }
+        # ... existing code ...
         if not df.empty:
             if selected_year not in unique_years:
                 selected_year = latest_year
@@ -843,89 +862,12 @@ def financials_report(request, game_id):
             df_latest.rename(columns={"year": "Year"}, inplace=True)
 
             transposed_df = df_latest.set_index('Year').T  # Set 'year' as index before transposing
-            # Now, we'll go through each row in the transposed DataFrame, rename it, and apply specific formatting
-            for index, row in transposed_df.iterrows():
-                if index == 'written_premium':
-                    # Rename and format the 'written_premium' row
-                    new_row_name = 'Written Premium'
-                    transposed_df.loc[index] = row.apply(
-                        lambda x: f"${round(x):,}")  # formatting as currency without decimals
-                elif index == 'in_force':
-                    # Rename and format the 'in_force' row
-                    new_row_name = get_force_term(game)
-                    transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
-                elif index == 'inv_income':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'Investment Income'
-                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'annual_expenses':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'Expenses'
-                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'ay_losses':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'Acc Yr Claims Incurred'
-                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'py_devl':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'Prior Yr Development'
-                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'profit':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'Profit'
-                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'dividend_paid':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'Dividend Paid'
-                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'capital':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'Ending Capital'
-                    transposed_df.loc[index] = row.apply(lambda x: f"${round(x):,}")  # formatting as an integer
-                elif index == 'capital_ratio':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'MCT Ratio'
-                    transposed_df.loc[index] = row.apply(lambda x: f"{round(x * 100, 1)}%")  # formatting as an integer
-                elif index == 'capital_test':
-                    # Rename and format the 'in_force' row
-                    new_row_name = 'MCT Test'
-
-                # Apply renaming to make the index/rows human-readable
-                transposed_df.rename(index={index: new_row_name}, inplace=True)
-
-            selected_columns = [col for col in transposed_df.columns if int(col) <= selected_year]
-            transposed_df = transposed_df[selected_columns]
-            # Convert the final, formatted DataFrame to HTML for rendering
-            if len(transposed_df.columns) < 4:
-                # If there are fewer than four years of data, we'll simulate the rest as empty columns
-                missing_years = 4 - len(transposed_df.columns)
-                for i in range(missing_years):
-                    transposed_df[f'{min(selected_columns) - i - 1} '] = ['' for _ in range(len(transposed_df.index))]
-
-            index = 2
-            blank_row = pd.DataFrame([['' for _ in transposed_df.columns]], columns=transposed_df.columns)
-            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
-            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
-            index = 4
-            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
-            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
-            index = 8
-            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
-            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
-            index = 11
-            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
-            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
-            index = 13
-            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
-            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
-
-            financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
-                                                         index=True)
-
+            # ... existing code ...
         else:
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:
         financial_data_table = '<p>No financial data available.</p>'
+        chart_data = None
 
     context = {
         'title': ' - Financial Report',
@@ -935,6 +877,7 @@ def financials_report(request, game_id):
         'unique_years': unique_years,
         'latest_year': latest_year,
         'selected_year': int(selected_year) if selected_year else None,  # Convert selected_year to int if it's not None
+        'chart_data': chart_data,
     }
     return render(request, template_name, context)
 
@@ -1177,13 +1120,13 @@ def industry_reports(request, game_id):
             index = 7
             transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
             transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
-            # if selected_player != industry_id:
-            #     index = 9
-            #     transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
-            #     transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
+            index = 11
+            transposed_df = pd.concat([transposed_df.iloc[:index], blank_row, transposed_df.iloc[index:]])
+            transposed_df.index = transposed_df.index.where(transposed_df.index != 0, ' ')
 
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
+
         else:
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:

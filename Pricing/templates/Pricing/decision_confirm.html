@@ -53,16 +53,28 @@
                                         {% csrf_token %}
                                         <div class="decis">
                                             <label for="profit">Selected Profit Margin (%):</label>
-                                            <span>{{ sel_profit_margin | safe}}</span>
+                                            {% if osfi_alert %}
+                                                <span style="font-weight: bold; color: #ff0000;">{{ sel_profit_margin }}% (OSFI Mandated)</span>
+                                            {% else %}
+                                                <span>{{ sel_profit_margin }}%</span>
+                                            {% endif %}
                                         </div>
                                         <div class="decis">
                                             <label for="mktg" style="margin-right: 10px;">Selected Marketing Expense (%):</label>
-                                            <span>{{ sel_mktg_expense | safe}}</span>
+                                            {% if osfi_alert %}
+                                                <span style="font-weight: bold; color: #ff0000;">{{ sel_mktg_expense }}% (OSFI Mandated)</span>
+                                            {% else %}
+                                                <span>{{ sel_mktg_expense }}%</span>
+                                            {% endif %}
                                         </div>
                                         {% if not is_novice_game %}
                                         <div class="decis">
                                             <label for="loss" style="margin-right: 18px;">Selected Loss Trend Margin (%):</label>
-                                            <span>{{ sel_trend_loss_margin | safe}}</span>
+                                            {% if osfi_alert %}
+                                                <span style="font-weight: bold; color: #ff0000;">{{ sel_trend_loss_margin }}% (OSFI Mandated)</span>
+                                            {% else %}
+                                                <span>{{ sel_trend_loss_margin }}%</span>
+                                            {% endif %}
                                         </div>
                                         {% else %}
                                         <div class="decis">&nbsp;</div>

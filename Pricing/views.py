@@ -1893,6 +1893,28 @@ def decision_input(request, game_id):
                 trend_loss_margins = [f"{x/10:.1f}" for x in range(trend_loss_min, trend_loss_max, 2)]  # 0.2% steps
             else:
                 trend_loss_margins = []
+                
+            # CRITICAL: Ensure OSFI values are always available in dropdowns
+            osfi_profit_novice = "10.0"
+            osfi_profit_expert = "7.0" 
+            osfi_trend_expert = "2.0"
+            
+            # Add OSFI values to ranges if they're not already included
+            if osfi_profit_novice not in profit_margins:
+                profit_margins.append(osfi_profit_novice)
+                profit_margins.sort(key=float)
+                
+            if osfi_profit_expert not in profit_margins:
+                profit_margins.append(osfi_profit_expert)
+                profit_margins.sort(key=float)
+                
+            if not is_novice_game and osfi_trend_expert not in trend_loss_margins:
+                trend_loss_margins.append(osfi_trend_expert)
+                trend_loss_margins.sort(key=float)
+            
+            print(f"DEBUG: Dropdown setup - profit_margins range: {profit_margins[:3]}...{profit_margins[-3:]} (total: {len(profit_margins)})")
+            print(f"DEBUG: Selected values for dropdowns - profit: '{sel_profit_margin/10:.1f}', mktg: '{sel_mktg_expense/10:.1f}', trend: '{sel_trend_loss_margin/10:.1f}' (novice: {is_novice_game})")
+            
             ret_from_confirm = request.session.get('ret_from_confirm', False)
             if ret_from_confirm is True or decisions_locked is True:
                 # Use stored values when returning from confirm or locked
@@ -2240,6 +2262,24 @@ def decision_confirm(request, game_id):
             messages.warning(request, f'Decisions already submitted for year: {decision_obj.year}')
             return redirect('Pricing-game_dashboard', game_id=game_id)
         
+        # CRITICAL FIX: Apply OSFI override logic again in confirmation if capital test still fails
+        if pass_capital_test != 'Pass':
+            print(f"DEBUG: OSFI enforcement in confirmation - Game ID: {game_id}, User: {user}")
+            print(f"DEBUG: Before OSFI override - profit: {decision_obj.sel_profit_margin}, mktg: {decision_obj.sel_exp_ratio_mktg}, trend: {decision_obj.sel_loss_trend_margin}")
+            
+            # Apply OSFI mandated values with correct scaling
+            if is_novice_game:
+                decision_obj.sel_profit_margin = 100  # 10.0%
+            else:
+                decision_obj.sel_profit_margin = 70   # 7.0%
+            decision_obj.sel_exp_ratio_mktg = 0  # 0.0%
+            if not is_novice_game:
+                decision_obj.sel_loss_trend_margin = 20  # 2.0%
+            else:
+                decision_obj.sel_loss_trend_margin = 0   # 0.0%
+                
+            print(f"DEBUG: After OSFI override - profit: {decision_obj.sel_profit_margin}, mktg: {decision_obj.sel_exp_ratio_mktg}, trend: {decision_obj.sel_loss_trend_margin}")
+        
         # CRITICAL FIX: Set decisions_locked = True BEFORE saving
         # This ensures the database transaction is atomic and the server-side
         # simulation will see the locked status immediately
@@ -2289,6 +2329,7 @@ def decision_confirm(request, game_id):
         'sel_trend_loss_margin': f'{decision_obj.sel_loss_trend_margin/10:.1f}',
         'sel_mktg_expense': f'{decision_obj.sel_exp_ratio_mktg/10:.1f}',
         'is_novice_game': is_novice_game,
+        'osfi_alert': osfi_alert,
     }
 
     return render(request, template_name, context)

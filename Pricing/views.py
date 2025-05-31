@@ -1875,124 +1875,80 @@ def decision_input(request, game_id):
                 froze_lock = True
                 decisions_locked = True
 
-            # Use the actual min/max ranges from the database
-            # Get min/max values from decision object, respecting actual database values (even if 0)
-            profit_min = getattr(decision_obj, 'sel_profit_margin_min', 40)  # Use database value or default 4.0%
-            profit_max = getattr(decision_obj, 'sel_profit_margin_max', 110)  # Default 11.0%
-            mktg_min = getattr(decision_obj, 'sel_exp_ratio_mktg_min', 0)  # 0.0% is valid for marketing
-            mktg_max = getattr(decision_obj, 'sel_exp_ratio_mktg_max', 60)  # Default 6.0%
+            # Get min/max ranges from server-side configuration - no hard-coded fallbacks
+            profit_min = decision_obj.sel_profit_margin_min
+            profit_max = decision_obj.sel_profit_margin_max
+            mktg_min = decision_obj.sel_exp_ratio_mktg_min
+            mktg_max = decision_obj.sel_exp_ratio_mktg_max
+            
+            if profit_min is None or profit_max is None:
+                messages.error(request, f"Server error: Missing profit margin ranges for year {selected_year}")
+                return redirect('Pricing-game_dashboard', game_id=game_id)
+                
+            if mktg_min is None or mktg_max is None:
+                messages.error(request, f"Server error: Missing marketing expense ranges for year {selected_year}")
+                return redirect('Pricing-game_dashboard', game_id=game_id)
             
             if not is_novice_game:
-                trend_loss_min = getattr(decision_obj, 'sel_loss_trend_margin_min', -20)  # -2.0% is valid
-                trend_loss_max = getattr(decision_obj, 'sel_loss_trend_margin_max', 50) or 50  # Default 5.0%
+                trend_loss_min = decision_obj.sel_loss_trend_margin_min
+                trend_loss_max = decision_obj.sel_loss_trend_margin_max
+                if trend_loss_min is None or trend_loss_max is None:
+                    messages.error(request, f"Server error: Missing trend loss margin ranges for year {selected_year}")
+                    return redirect('Pricing-game_dashboard', game_id=game_id)
             
-            profit_margins = [f"{x/10:.1f}" for x in range(profit_min, profit_max, 2)]  # 0.2% steps
-            mktg_expenses = [f"{x/10:.1f}" for x in range(mktg_min, mktg_max, 2)]     # 0.2% steps
+            # Generate dropdown options from server-provided ranges
+            profit_margins = [f"{x/10:.1f}" for x in range(profit_min, profit_max + 1, 2)]  # 0.2% steps
+            mktg_expenses = [f"{x/10:.1f}" for x in range(mktg_min, mktg_max + 1, 2)]     # 0.2% steps
 
             if not is_novice_game:
-                trend_loss_margins = [f"{x/10:.1f}" for x in range(trend_loss_min, trend_loss_max, 2)]  # 0.2% steps
+                trend_loss_margins = [f"{x/10:.1f}" for x in range(trend_loss_min, trend_loss_max + 1, 2)]  # 0.2% steps
             else:
                 trend_loss_margins = []
-                
-            # CRITICAL: Ensure OSFI values are always available in dropdowns
-            osfi_profit_novice = "10.0"
-            osfi_profit_expert = "7.0" 
-            osfi_trend_expert = "2.0"
-            
-            # Add OSFI values to ranges if they're not already included
-            if osfi_profit_novice not in profit_margins:
-                profit_margins.append(osfi_profit_novice)
-                profit_margins.sort(key=float)
-                
-            if osfi_profit_expert not in profit_margins:
-                profit_margins.append(osfi_profit_expert)
-                profit_margins.sort(key=float)
-                
-            if not is_novice_game and osfi_trend_expert not in trend_loss_margins:
-                trend_loss_margins.append(osfi_trend_expert)
-                trend_loss_margins.sort(key=float)
-            
-            print(f"DEBUG: Dropdown setup - profit_margins range: {profit_margins[:3]}...{profit_margins[-3:]} (total: {len(profit_margins)})")
-            print(f"DEBUG: Selected values for dropdowns - profit: '{sel_profit_margin/10:.1f}', mktg: '{sel_mktg_expense/10:.1f}', trend: '{sel_trend_loss_margin/10:.1f}' (novice: {is_novice_game})")
             
             ret_from_confirm = request.session.get('ret_from_confirm', False)
             if ret_from_confirm is True or decisions_locked is True:
                 # Use stored values when returning from confirm or locked
-                last_profit_margin = decision_obj.sel_profit_margin
-                last_mktg_expense = decision_obj.sel_exp_ratio_mktg
+                sel_profit_margin = decision_obj.sel_profit_margin
+                sel_mktg_expense = decision_obj.sel_exp_ratio_mktg
                 if not is_novice_game:
-                    last_trend_loss_margin = decision_obj.sel_loss_trend_margin
+                    sel_trend_loss_margin = decision_obj.sel_loss_trend_margin
+                else:
+                    sel_trend_loss_margin = 0
                 request.session['ret_from_confirm'] = False
             elif decision_obj_last:
-                # Use previous year's values as defaults
-                last_profit_margin = decision_obj_last.sel_profit_margin
-                last_mktg_expense = decision_obj_last.sel_exp_ratio_mktg
-                if not is_novice_game:
-                    last_trend_loss_margin = decision_obj_last.sel_loss_trend_margin
-                
-                # Check if previous year's values look like they were affected by OSFI scaling bug
-                # (i.e., single-digit profit margins that should be OSFI mandated values)
-                if last_profit_margin <= 15 and last_mktg_expense == 0:  # Likely OSFI intervention with scaling bug
-                    print(f"DEBUG: Detected legacy OSFI values from previous year - correcting scaling")
-                    print(f"DEBUG: Original values: profit={last_profit_margin}, mktg={last_mktg_expense}")
-                    
-                    # Apply proper OSFI defaults with correct scaling
-                    if is_novice_game:
-                        last_profit_margin = 100  # 10.0%
-                    else:
-                        last_profit_margin = 70   # 7.0%
-                    last_mktg_expense = 0  # 0.0% (already correct)
-                    if not is_novice_game:
-                        last_trend_loss_margin = 20  # 2.0%
-                    
-                    print(f"DEBUG: Corrected values: profit={last_profit_margin}, mktg={last_mktg_expense}")
+                # Use previous year's values as defaults if user hasn't made selections
+                if sel_profit_margin is None:
+                    sel_profit_margin = decision_obj_last.sel_profit_margin
+                if sel_mktg_expense is None:
+                    sel_mktg_expense = decision_obj_last.sel_exp_ratio_mktg
+                if not is_novice_game and sel_trend_loss_margin is None:
+                    sel_trend_loss_margin = decision_obj_last.sel_loss_trend_margin
+                elif is_novice_game:
+                    sel_trend_loss_margin = 0
             else:
-                # First year defaults
-                last_profit_margin = 7  # 7%
-                last_mktg_expense = 2   # 2%
-                if not is_novice_game:
-                    last_trend_loss_margin = 2  # 2%
+                # First year - use server-provided current values or middle of range
+                if sel_profit_margin is None:
+                    sel_profit_margin = decision_obj.sel_profit_margin or ((profit_min + profit_max) // 2)
+                if sel_mktg_expense is None:
+                    sel_mktg_expense = decision_obj.sel_exp_ratio_mktg or ((mktg_min + mktg_max) // 2)
+                if not is_novice_game and sel_trend_loss_margin is None:
+                    sel_trend_loss_margin = decision_obj.sel_loss_trend_margin or ((trend_loss_min + trend_loss_max) // 2)
+                elif is_novice_game:
+                    sel_trend_loss_margin = 0
 
-            # Set current selections
-            if sel_profit_margin is None:
-                sel_profit_margin = last_profit_margin
-
-            if sel_mktg_expense is None:
-                sel_mktg_expense = last_mktg_expense
-            
-            if not is_novice_game and sel_trend_loss_margin is None:
-                sel_trend_loss_margin = last_trend_loss_margin
-            elif is_novice_game:
-                sel_trend_loss_margin = 0  # Changed from 2 to 0 for Novice games
-
+            # Determine OSFI alert status from server-side pass_capital_test
             if pass_capital_test == 'Pass':
                 mct_pass = '<span class="green-text"><b>' + pass_capital_test + '</b></span>'
                 osfi_alert = False
             else:
                 mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
-                # Debug: Print game difficulty and OSFI override values
-                print(f"DEBUG: OSFI FAILURE - Game ID: {game_id}, User: {user}")
-                print(f"DEBUG: is_novice_game: {is_novice_game}")
-                print(f"DEBUG: pass_capital_test: {pass_capital_test}")
-                print(f"DEBUG: Original sel_profit_margin: {sel_profit_margin}")
-                
-                # Override with OSFI mandated values
-                if is_novice_game:
-                    sel_profit_margin = 100  # 10.0% (stored as tenths)
-                    print(f"DEBUG: Setting profit margin to 10% for Novice game")
-                else:
-                    sel_profit_margin = 70   # 7.0% (stored as tenths)
-                    print(f"DEBUG: Setting profit margin to 7% for Expert game")
-                    
-                sel_mktg_expense = 0
-                if not is_novice_game:
-                    sel_trend_loss_margin = 20  # 2.0% (stored as tenths)
-                else:
-                    sel_trend_loss_margin = 0  # Novice games get 0% even during OSFI intervention
-                    
-                print(f"DEBUG: Final values - profit_margin: {sel_profit_margin}, mktg_expense: {sel_mktg_expense}, trend_loss_margin: {sel_trend_loss_margin}")
                 osfi_alert = True
                 froze_lock = True
+                # Note: OSFI intervention values should already be set by server-side game logic
+                # GUI just reads and displays the server-mandated values
+
+            # DEBUG: Print final selected values after all logic is complete
+            # print(f"DEBUG: Final selected values - profit: {sel_profit_margin/10:.1f}%, mktg: {sel_mktg_expense/10:.1f}%, trend: {sel_trend_loss_margin/10:.1f}% (novice: {is_novice_game})")
 
             claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
             if claimtrend_obj:
@@ -2262,27 +2218,7 @@ def decision_confirm(request, game_id):
             messages.warning(request, f'Decisions already submitted for year: {decision_obj.year}')
             return redirect('Pricing-game_dashboard', game_id=game_id)
         
-        # CRITICAL FIX: Apply OSFI override logic again in confirmation if capital test still fails
-        if pass_capital_test != 'Pass':
-            print(f"DEBUG: OSFI enforcement in confirmation - Game ID: {game_id}, User: {user}")
-            print(f"DEBUG: Before OSFI override - profit: {decision_obj.sel_profit_margin}, mktg: {decision_obj.sel_exp_ratio_mktg}, trend: {decision_obj.sel_loss_trend_margin}")
-            
-            # Apply OSFI mandated values with correct scaling
-            if is_novice_game:
-                decision_obj.sel_profit_margin = 100  # 10.0%
-            else:
-                decision_obj.sel_profit_margin = 70   # 7.0%
-            decision_obj.sel_exp_ratio_mktg = 0  # 0.0%
-            if not is_novice_game:
-                decision_obj.sel_loss_trend_margin = 20  # 2.0%
-            else:
-                decision_obj.sel_loss_trend_margin = 0   # 0.0%
-                
-            print(f"DEBUG: After OSFI override - profit: {decision_obj.sel_profit_margin}, mktg: {decision_obj.sel_exp_ratio_mktg}, trend: {decision_obj.sel_loss_trend_margin}")
-        
-        # CRITICAL FIX: Set decisions_locked = True BEFORE saving
-        # This ensures the database transaction is atomic and the server-side
-        # simulation will see the locked status immediately
+        # Lock decisions and save - server-side logic handles any OSFI constraints
         with transaction.atomic():
             decision_obj.decisions_locked = True
             decision_obj.save()

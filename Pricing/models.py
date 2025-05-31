@@ -12,6 +12,7 @@ class GamePrefs(models.Model):
     human_player_cnt = models.IntegerField(default=1)
     game_observable = models.BooleanField()
     default_selection_type = models.CharField(max_length=8)
+    game_difficulty = models.CharField(max_length=10, default='Novice')
     timestamp = models.DateTimeField(auto_now=True)  # This field will be updated every time the model is saved.
 
 

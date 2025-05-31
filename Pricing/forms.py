@@ -11,6 +11,7 @@ class GamePrefsForm(forms.ModelForm):
 
     CHOICES = [(i, str(i)) for i in range(CONFIG_MAX_TYPES + 1)]
     HUMAN_CHOICES = [(i, str(i)) for i in range(2, CONFIG_MAX_TYPES + 1)]
+    DIFFICULTY_CHOICES = [('Novice', 'Novice'), ('Expert', 'Expert')]
 
     def __init__(self, *args, **kwargs):
         super(GamePrefsForm, self).__init__(*args, **kwargs)
@@ -22,6 +23,7 @@ class GamePrefsForm(forms.ModelForm):
         self.fields['sel_type_01'].initial = 2 # int(np.random.normal(mean_val, std_dev))
         self.fields['sel_type_02'].initial = 3 # int(np.random.normal(mean_val, std_dev))
         self.fields['sel_type_03'].initial = 4 # int(np.random.normal(mean_val, std_dev))
+        self.fields['game_difficulty'].initial = 'Novice'
 
     human_player_cnt = forms.ChoiceField(choices=HUMAN_CHOICES, label="Human Players:", required=False)
     sel_type_01 = forms.ChoiceField(choices=CHOICES, label="CPU w Growth profile:")
@@ -38,7 +40,13 @@ class GamePrefsForm(forms.ModelForm):
         initial='Balanced'  # Set 'Y' as the default
     )
 
+    game_difficulty = forms.ChoiceField(
+        choices=DIFFICULTY_CHOICES,
+        label="Game Difficulty:",
+        initial='Novice'
+    )
+
     class Meta:
         model = GamePrefs
         fields = ['human_player_cnt', 'sel_type_01', 'sel_type_02', 'sel_type_03', 'game_observable',
-                  'default_selection_type']
+                  'default_selection_type', 'game_difficulty']

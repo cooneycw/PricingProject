@@ -1,0 +1,35 @@
+.financials-container {
+  /* Styles for the overall container */
+}
+
+.select-box-container {
+  /* Styles for the select box container, you've already added inline margin at the bottom */
+}
+
+.financial-data-table {
+  width: 100%;
+  display: flex;
+  justify-content: space-between; /* or use another method to space columns */
+  font-family: 'Roboto Mono', monospace !important; /* Replace 'Roboto Mono' with your chosen font */
+  /* Additional styling */
+}
+.my-financial-table tr:nth-child(even) {
+  background-color: #f2f2f2; /* This is usually light grey */
+}
+.my-financial-table {
+  width: 100%; /* Ensures your table takes up the full container width */
+  table-layout: fixed;  /* This makes sure that the column widths are set by the table, and not by the individual cell content */
+  font-family: 'Roboto Mono', monospace !important; /* Replace 'Roboto Mono' with your chosen font */
+}
+
+.my-financial-table th, .my-financial-table td {
+  width: 25%; /* Forces each column to take up 25% of the table width */
+  text-align: right;  /* Keeps your content aligned to the right */
+  overflow: hidden;  /* Ensures that content too long for the cell doesn’t spill out */
+  font-family: 'Roboto Mono', monospace !important; /* Replace 'Roboto Mono' with your chosen font */
+}
+
+
+
+
+

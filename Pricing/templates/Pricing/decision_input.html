@@ -55,34 +55,55 @@
                                         {% csrf_token %}
                                         <div class="decis">
                                             <label for="profit">Selected Profit Margin (%):</label>
-                                            <div class="select-wrapper">
-                                                <select id="profit" name="profit" {% if froze_lock %}disabled{% endif %}>
-                                                {% for profit_margin in profit_margins %}
-                                                    <option value="{{ profit_margin }}" {% if sel_profit_margin == profit_margin %}selected{% endif %}>{{ profit_margin }}</option>
-                                                {% endfor %}
+                                            {% if froze_lock %}
+                                                <span style="font-weight: bold; color: #ff0000;">{{ sel_profit_margin }}% (OSFI Mandated)</span>
+                                                <select id="profit" name="profit" disabled style="display: none;">
+                                                    <option value="{{ sel_profit_margin }}" selected>{{ sel_profit_margin }}</option>
                                                 </select>
-                                            </div>
+                                            {% else %}
+                                                <div class="select-wrapper">
+                                                    <select id="profit" name="profit">
+                                                    {% for profit_margin in profit_margins %}
+                                                        <option value="{{ profit_margin }}" {% if sel_profit_margin == profit_margin %}selected{% endif %}>{{ profit_margin }}</option>
+                                                    {% endfor %}
+                                                    </select>
+                                                </div>
+                                            {% endif %}
                                         </div>
                                         <div class="decis">
                                             <label for="mktg" style="margin-right: 10px;">Selected Marketing Expense (%):</label>
-                                            <div class="select-wrapper">
-                                                <select id="mktg" name="mktg" {% if froze_lock %}disabled{% endif %}>
-                                                {% for mktg_expense in mktg_expenses %}
-                                                    <option value="{{ mktg_expense }}" {% if sel_mktg_expense == mktg_expense %}selected{% endif %}>{{ mktg_expense }}</option>
-                                                {% endfor %}
+                                            {% if froze_lock %}
+                                                <span style="font-weight: bold; color: #ff0000;">{{ sel_mktg_expense }}% (OSFI Mandated)</span>
+                                                <select id="mktg" name="mktg" disabled style="display: none;">
+                                                    <option value="{{ sel_mktg_expense }}" selected>{{ sel_mktg_expense }}</option>
                                                 </select>
-                                            </div>
+                                            {% else %}
+                                                <div class="select-wrapper">
+                                                    <select id="mktg" name="mktg">
+                                                    {% for mktg_expense in mktg_expenses %}
+                                                        <option value="{{ mktg_expense }}" {% if sel_mktg_expense == mktg_expense %}selected{% endif %}>{{ mktg_expense }}</option>
+                                                    {% endfor %}
+                                                    </select>
+                                                </div>
+                                            {% endif %}
                                         </div>
                                         {% if not is_novice_game %}
                                         <div class="decis">
                                             <label for="loss" style="margin-right: 18px;">Selected Loss Trend Margin (%):</label>
-                                            <div class="select-wrapper">
-                                                <select id="loss" name="loss" {% if froze_lock %}disabled{% endif %}>
-                                                {% for trend_loss_margin in trend_loss_margins %}
-                                                    <option value="{{ trend_loss_margin }}" {% if sel_trend_loss_margin == trend_loss_margin %}selected{% endif %}>{{ trend_loss_margin }}</option>
-                                                {% endfor %}
+                                            {% if froze_lock %}
+                                                <span style="font-weight: bold; color: #ff0000;">{{ sel_trend_loss_margin }}% (OSFI Mandated)</span>
+                                                <select id="loss" name="loss" disabled style="display: none;">
+                                                    <option value="{{ sel_trend_loss_margin }}" selected>{{ sel_trend_loss_margin }}</option>
                                                 </select>
-                                            </div>
+                                            {% else %}
+                                                <div class="select-wrapper">
+                                                    <select id="loss" name="loss">
+                                                    {% for trend_loss_margin in trend_loss_margins %}
+                                                        <option value="{{ trend_loss_margin }}" {% if sel_trend_loss_margin == trend_loss_margin %}selected{% endif %}>{{ trend_loss_margin }}</option>
+                                                    {% endfor %}
+                                                    </select>
+                                                </div>
+                                            {% endif %}
                                         </div>
                                         {% else %}
                                         <div class="decis">&nbsp;</div> <!-- Minimal placeholder using .decis class styling -->

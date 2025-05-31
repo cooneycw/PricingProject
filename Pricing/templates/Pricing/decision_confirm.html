@@ -59,10 +59,12 @@
                                             <label for="mktg" style="margin-right: 10px;">Selected Marketing Expense (%):</label>
                                             <span>{{ sel_mktg_expense | safe}}</span>
                                         </div>
+                                        {% if not is_novice_game %}
                                         <div class="decis">
                                             <label for="loss" style="margin-right: 18px;">Selected Loss Trend Margin (%):</label>
                                             <span>{{ sel_loss_margin | safe}}</span>
                                         </div>
+                                        {% endif %}
 
                                         <div>
                                             <br/>

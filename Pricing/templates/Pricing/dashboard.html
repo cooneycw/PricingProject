@@ -34,7 +34,11 @@
                                             <div class="annotation" style="font-weight: bold">Industry</div>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="{% url 'Pricing-claim_devl_report' game.game_id %}" class="report-icon" title="Claim Development Report"><img src="{% static 'Pricing/004_triangle.png'  %}" alt="Claim Development Report" width="80"></a>
+                                            {% if is_novice_game %}
+                                                <a href="#" class="report-icon" title="Claim Development Report (Disabled for Novice)" style="opacity: 0.75;"><img src="{% static 'Pricing/004_triangle.png'  %}" alt="Claim Development Report" width="80"></a>
+                                            {% else %}
+                                                <a href="{% url 'Pricing-claim_devl_report' game.game_id %}" class="report-icon" title="Claim Development Report"><img src="{% static 'Pricing/004_triangle.png'  %}" alt="Claim Development Report" width="80"></a>
+                                            {% endif %}
                                             <div class="annotation" style="font-weight: bold">Clm Dev</div>
                                         </div>
                                         <div class="col-md-3 mb-3">
@@ -69,45 +73,50 @@
     </main>
     <!-- JavaScript to enable AJAX-based chat -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script>
+    <script type="text/javascript">
+    // Using type="text/javascript" for clarity
     var lastReviewCnt = null;
     {% if not decisions_frozen %}
-    var isoDateTimeStringT = "{{ target_datetime }}";
-    var targetDate = new Date(isoDateTimeStringT);
-    targetDate.setUTCHours(targetDate.getUTCHours() - 0);
-    var countdownInterval = setInterval(function() {
-    var currentDate = new Date();
-    var timeRemaining = targetDate - currentDate;
-    if (timeRemaining <= 0) {
-      clearInterval(countdownInterval);
-      document.getElementById("countdown").innerHTML = "Time expired...";
-    } else {
-      var minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
-      var seconds = Math.floor((timeRemaining % (1000 * 60)) / 1000);
+    // Countdown timer logic only if decisions are not frozen
+    var isoDateTimeStringT = "{{ target_datetime|default_if_none:'' }}"; // Added default_if_none
+    if (isoDateTimeStringT) { // Check if target_datetime is available
+        var targetDate = new Date(isoDateTimeStringT);
+        // targetDate.setUTCHours(targetDate.getUTCHours() - 0); // Assuming server time is already correct UTC or conversion handled elsewhere
+        var countdownInterval = setInterval(function() {
+            var currentDate = new Date();
+            var timeRemaining = targetDate - currentDate;
+            if (timeRemaining <= 0) {
+                clearInterval(countdownInterval);
+                document.getElementById("countdown").innerHTML = "Time expired...";
+            } else {
+                var minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+                var seconds = Math.floor((timeRemaining % (1000 * 60)) / 1000);
 
-      var formattedMinutes = minutes.toString().padStart(2, '0');
-      var formattedSeconds = seconds.toString().padStart(2, '0');
+                var formattedMinutes = minutes.toString().padStart(2, '0');
+                var formattedSeconds = seconds.toString().padStart(2, '0');
 
-      document.getElementById("countdown").innerHTML = formattedMinutes + ":" + formattedSeconds + "s";
+                document.getElementById("countdown").innerHTML = formattedMinutes + ":" + formattedSeconds + "s";
+            }
+        }, 1000); // Update every second (1000 milliseconds)
     }
-    }, 1000); // Update every second (1000 milliseconds)
     {% endif %}
 
-    const greenList = {{ green_list | safe }};
-    const orangeList = {{ orange_list | safe }};
-    const purpleList = {{ purple_list | safe }};
-            $(document).ready(function() {
-            const gameId = "{{ game.game_id }}";  // You can pass game_id through the Django context
-            const user = "{{ user.username }}";
+    const greenList = {{ green_list|safe|default_if_none:"[]" }};
+    const orangeList = {{ orange_list|safe|default_if_none:"[]" }};
+    const purpleList = {{ purple_list|safe|default_if_none:"[]" }};
+
+    $(document).ready(function() {
+        const gameId = "{{ game.game_id }}";
+        const user = "{{ user.username }}";
 
         $('#chat-message-submit').click(function() {
             const message = $('#chat-message-input').val();
-            const user = "{{ user.username }}";
+            // const user = "{{ user.username }}"; // Already defined above
             const now = new Date();
 
             // Convert to America/New_York time zone and format the string
-            const options = { timeZone: "America/New_York", year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' };
-            const currentTime = now.toISOString().split('T')[0] + " " + now.toTimeString().split(' ')[0];
+            // const options = { timeZone: "America/New_York", year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }; // Not used
+            // const currentTime = now.toISOString().split('T')[0] + " " + now.toTimeString().split(' ')[0]; // Not used
 
             $.ajax({
                 url: '/send_message/',
@@ -118,95 +127,69 @@
                     csrfmiddlewaretoken: '{{ csrf_token }}'
                 },
                 success: function(data) {
-                    // No need to append the message to the chat log
-                    $('#chat-message-input').val(''); // Clear the input
-
-                    // Update the timer visibility based on review_cnt and decisions_frozen
-                        }
+                    $('#chat-message-input').val('');
+                }
             });
         });
 
-            // Function to fetch messages
-            function fetchMessages() {
-                $.ajax({
-                    url: '/fetch_messages/',
-                    method: 'GET',
-                    data: {
-                        game_id: gameId,
-                    },
-                    success: function(data) {
-                        $('#chat-log').html('');
-                   console.log("lastReviewCnt:", lastReviewCnt);
-                    console.log("data.review_cnt:", data.review_cnt)
+        function fetchMessages() {
+            $.ajax({
+                url: '/fetch_messages/',
+                method: 'GET',
+                data: {
+                    game_id: gameId,
+                    // latest_sequence: latestSequence, // Assuming you handle latestSequence if needed
+                },
+                success: function(data) {
+                    $('#chat-log').html('');
                     if (lastReviewCnt === null) {
                         lastReviewCnt = data.review_cnt;
-                }
-                    if (data.review_cnt > lastReviewCnt ) {
-                location.reload(true);
-            } else if (data.review_cnt === lastReviewCnt) {
-                // Keep current state of the timer
-            }
-                        data.messages.forEach(function(message) {
-                            let row = `${message.from_sender} ${message.time}: ${message.content}`;
-                            let rowClass = 'chat-row';
-
-                            if (message.from_sender === "game_server" && message.content === "Review decisions.") {
-                                rowClass += ' game-server special-message';
-                                // location.reload();
-                            } else if (message.from_sender === "game_server") {
-                                let isGreenMessage = false;
-                                let isOrangeMessage = false;
-                                let isPurpleMessage = false;
-
-                                // Check if message contains any string from greenList
-                                greenList.forEach(function(greenString) {
-                                    if (message.content.includes(greenString)) {
-                                        isGreenMessage = true;
-                                        return; // Break out of the loop if a greenString is found
-                                    }
-                                });
-
-                                orangeList.forEach(function(orangeString) {
-                                    if (message.content.includes(orangeString)) {
-                                        isOrangeMessage = true;
-                                        return; // Break out of the loop if a greenString is found
-                                    }
-                                });
-
-                                purpleList.forEach(function(purpleString) {
-                                    if (message.content.includes(purpleString)) {
-                                        isPurpleMessage = true;
-                                        return; // Break out of the loop if a greenString is found
-                                    }
-                                });
-
-
-                                if (isGreenMessage) {
-                                    rowClass += ' green-message';
-                                }
-                                else if (isOrangeMessage) {
-                                    rowClass += ' orange-message';
-                                }
-                                else if (isPurpleMessage) {
-                                    rowClass += ' purple-message';
-                                }
-                                else {
-                                    rowClass += ' game-server';
-                                }
-                            }
-
-                            $('#chat-log').prepend('<div class="' + rowClass + '">' + row + '</div>');
-                        });
                     }
-                });
-            }
+                    if (data.review_cnt > lastReviewCnt ) {
+                        location.reload(true);
+                    } else if (data.review_cnt === lastReviewCnt) {
+                        // Keep current state
+                    }
+                    data.messages.forEach(function(message) {
+                        let row = `${message.from_sender} ${message.time}: ${message.content}`;
+                        let rowClass = 'chat-row';
 
-            // Call immediately to populate on page load
-            fetchMessages();
+                        if (message.from_sender === "game_server" && message.content === "Review decisions.") {
+                            rowClass += ' game-server special-message';
+                        } else if (message.from_sender === "game_server") {
+                            let isGreenMessage = false;
+                            let isOrangeMessage = false;
+                            let isPurpleMessage = false;
 
-            // Poll for new messages every 2 seconds
-            setInterval(fetchMessages, 2000);
-        });
+                            greenList.forEach(function(greenString) {
+                                if (message.content.includes(greenString)) {
+                                    isGreenMessage = true; return;
+                                }
+                            });
+                            orangeList.forEach(function(orangeString) {
+                                if (message.content.includes(orangeString)) {
+                                    isOrangeMessage = true; return;
+                                }
+                            });
+                            purpleList.forEach(function(purpleString) {
+                                if (message.content.includes(purpleString)) {
+                                    isPurpleMessage = true; return;
+                                }
+                            });
+
+                            if (isGreenMessage) { rowClass += ' green-message'; }
+                            else if (isOrangeMessage) { rowClass += ' orange-message'; }
+                            else if (isPurpleMessage) { rowClass += ' purple-message'; }
+                            else { rowClass += ' game-server'; }
+                        }
+                        $('#chat-log').prepend('<div class="' + rowClass + '">' + row + '</div>');
+                    });
+                }
+            });
+        }
+        fetchMessages();
+        setInterval(fetchMessages, 2000);
+    });
     </script>
 <style>
   #chat-log {

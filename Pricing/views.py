@@ -455,6 +455,14 @@ def game_dashboard(request, game_id):
     target_datetime = None
     decisions_frozen = True
 
+    is_novice_game = False  # Default to not Novice
+    try:
+        game_prefs = GamePrefs.objects.get(user=game.initiator)
+        if game_prefs.game_difficulty == 'Novice':
+            is_novice_game = True
+    except GamePrefs.DoesNotExist:
+        pass # Keep is_novice_game as False if prefs not found
+
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
         decisions_data_list = list(decisions_obj.values('year', 'decisions_game_stage', 'decisions_time_stamp', 'decisions_locked'))
@@ -490,6 +498,7 @@ def game_dashboard(request, game_id):
         'green_list': green_list,
         'orange_list': orange_list,
         'purple_list': purple_list,
+        'is_novice_game': is_novice_game, # Add to context
     }
 
     return render(request, template_name, context)
@@ -1030,11 +1039,15 @@ def industry_reports(request, game_id):
                     transposed_df.loc[index][industry_company_name] = ' '
                 # Apply renaming to make the index/rows human-readable
                 transposed_df.rename(index={index: new_row_name}, inplace=True)
-
+            # Get displayed player names that actually exist in the DataFrame
             displayed_players_names = [player_list[i] for i in displayed_players]
-
-            # Creating a new DataFrame with only the displayed players
-            transposed_df = transposed_df[displayed_players_names]
+            # Filter to only use column names that exist in the DataFrame
+            available_columns = [name for name in displayed_players_names if name in transposed_df.columns]
+            
+            # Creating a new DataFrame with only the displayed players that exist
+            if available_columns:
+                transposed_df = transposed_df[available_columns]
+            # If no columns match, continue with all columns
 
             for player in transposed_df.columns:
                 # Convert the marketing expenses from string to float for calculation
@@ -1793,18 +1806,30 @@ def decision_input(request, game_id):
     rate_chg = None
     froze_lock = False
     decisions_locked = False
+    is_novice_game = False
 
-    selected_year = request.POST.get('year')  # Get the selected year from the query parameters
+    # Determine game difficulty
+    try:
+        game_prefs = GamePrefs.objects.get(user=game.initiator)
+        if game_prefs.game_difficulty == 'Novice':
+            is_novice_game = True
+    except GamePrefs.DoesNotExist:
+        pass
+
+    selected_year = request.POST.get('year')
     selected_year = int(selected_year) if selected_year else None
 
     sel_profit_margin = request.POST.get('profit')
-    sel_profit_margin = sel_profit_margin if sel_profit_margin else None
+    sel_profit_margin = int(float(sel_profit_margin) * 10) if sel_profit_margin else None
 
     sel_mktg_expense = request.POST.get('mktg')
-    sel_mktg_expense = sel_mktg_expense if sel_mktg_expense else None
+    sel_mktg_expense = int(float(sel_mktg_expense) * 10) if sel_mktg_expense else None
 
-    sel_loss_margin = request.POST.get('loss')
-    sel_loss_margin = sel_loss_margin if sel_loss_margin else None
+    if not is_novice_game:
+        sel_loss_margin = request.POST.get('loss')
+        sel_loss_margin = int(float(sel_loss_margin) * 10) if sel_loss_margin else None
+    else:
+        sel_loss_margin = 0  # Changed from 2 to 0 for Novice games
 
     template_name = 'Pricing/decision_input.html'
 
@@ -1812,15 +1837,10 @@ def decision_input(request, game_id):
     claimtrend_data = ClaimTrends.objects.filter(game_id=game)
 
     unique_years = indication_obj.order_by('-year').values_list('year', flat=True).distinct()
-    if unique_years:  # Proceed if there are any financial years available
+    if unique_years:
         if selected_year not in unique_years:
             selected_year = unique_years[0]
 
-        # coverages = ['Bodily Injury', 'Collision', 'Total']
-        # for count_id, coverage in enumerate(coverages):
-        #    coverage_list.append(coverage)
-        #    coverage_id_list.append(count_id)
-        # coverage_options = list(zip(coverage_id_list, coverage_list))
         financial_data = Financials.objects.filter(game_id=game, player_id=user)
         financial_data_list = list(financial_data.values('year', 'in_force', 'written_premium'))
         financial_df = pd.DataFrame(financial_data_list)
@@ -1828,8 +1848,7 @@ def decision_input(request, game_id):
         financial_df = financial_df.sort_values('year', ascending=True)
 
         if not financial_df.empty:
-            indication_obj = Indications.objects.filter(game_id=game, player_id=user, year=selected_year)
-            indication_data_dict = list(indication_obj.values('indication_data'))[0]['indication_data']
+            indication_data_dict = list(indication_obj.filter(year=selected_year).values('indication_data'))[0]['indication_data']
             devl_data = indication_data_dict['devl_data']
             wts = indication_data_dict['indic_wts']
             fixed_exp = decimal.Decimal(indication_data_dict['fixed_exp'])
@@ -1844,68 +1863,87 @@ def decision_input(request, game_id):
             acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
             devl_mths = indication_data_dict['devl_mths']
 
-            all_data_years = copy.deepcopy(clm_yrs)  # Get all unique years
-            all_data_years.reverse()
-
+            # CRITICAL: Ensure we get the current user's decision object
             decision_obj = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year).first()
+            if not decision_obj:
+                messages.error(request, f"Decision object not found for user {user} in year {selected_year}")
+                return redirect('Pricing-game_dashboard', game_id=game_id)
+            
             decision_obj_last = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year-1).first()
 
             if decision_obj.decisions_locked == True:
                 froze_lock = True
                 decisions_locked = True
 
-            profit_margins = [f'{x/10:.1f}' for x in range(decision_obj.sel_profit_margin_min,
-                                               1 + decision_obj.sel_profit_margin_max)]
+            # Use the actual min/max ranges from init_decisions, not the stored values
+            # These should be reasonable ranges like 4-10 for profit margin, 0-5 for marketing
+            profit_margins = [f"{x/10:.1f}" for x in range(40, 110, 10)]  # 4.0% to 10.0%
+            mktg_expenses = [f"{x/10:.1f}" for x in range(0, 60, 10)]     # 0.0% to 5.0%
 
-            mktg_expenses = [f'{x/10:.1f}' for x in range(decision_obj.sel_exp_ratio_mktg_min,
-                             1 + decision_obj.sel_exp_ratio_mktg_max)]
+            if not is_novice_game:
+                loss_margins = [f"{x/10:.1f}" for x in range(-20, 50, 10)]  # -2.0% to 4.0%
+            else:
 
-            loss_margins = [f'{x/10:.1f}' for x in range(decision_obj.sel_loss_trend_margin_min,
-                                                   1 + decision_obj.sel_loss_trend_margin_max)]
-
+                loss_margins = []
             ret_from_confirm = request.session.get('ret_from_confirm', False)
             if ret_from_confirm is True or decisions_locked is True:
+                # Use stored values when returning from confirm or locked
                 last_profit_margin = decision_obj.sel_profit_margin
                 last_mktg_expense = decision_obj.sel_exp_ratio_mktg
-                last_loss_margin = decision_obj.sel_loss_trend_margin
+                if not is_novice_game:
+                    last_loss_margin = decision_obj.sel_loss_trend_margin
                 request.session['ret_from_confirm'] = False
             elif decision_obj_last:
+                # Use previous year's values as defaults
                 last_profit_margin = decision_obj_last.sel_profit_margin
                 last_mktg_expense = decision_obj_last.sel_exp_ratio_mktg
-                last_loss_margin = decision_obj_last.sel_loss_trend_margin
+                if not is_novice_game:
+                    last_loss_margin = decision_obj_last.sel_loss_trend_margin
             else:
-                last_profit_margin = None
-                last_mktg_expense = None
-                last_loss_margin = None
+                # First year defaults
+                last_profit_margin = 7  # 7%
+                last_mktg_expense = 2   # 2%
+                if not is_novice_game:
+                    last_loss_margin = 2  # 2%
 
-            if last_profit_margin is not None and sel_profit_margin is None:
-                sel_profit_margin = f'{last_profit_margin/10:.1f}'
+            # Set current selections
+            if sel_profit_margin is None:
+                sel_profit_margin = last_profit_margin
 
-            if last_mktg_expense is not None and sel_mktg_expense is None:
-                sel_mktg_expense = f'{last_mktg_expense/10:.1f}'
+            if sel_mktg_expense is None:
+                sel_mktg_expense = last_mktg_expense
+            
+            if not is_novice_game and sel_loss_margin is None:
+                sel_loss_margin = last_loss_margin
+            elif is_novice_game:
+                sel_loss_margin = 0  # Changed from 2 to 0 for Novice games
 
-            if last_loss_margin is not None and sel_loss_margin is None:
-                sel_loss_margin = f'{last_loss_margin/10:.1f}'
-
-            # pass_capital_test = 'Fail'
             if pass_capital_test == 'Pass':
                 mct_pass = '<span class="green-text"><b>' + pass_capital_test + '</b></span>'
                 osfi_alert = False
             else:
                 mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
-                sel_profit_margin = '7.0'  # Instead of '0.7'
-                sel_mktg_expense = '0.0'
-                sel_loss_margin = '2.0'    # Instead of '0.2'
+                # Override with OSFI mandated values
+                if is_novice_game:
+                    sel_profit_margin = 10
+                else:
+                    sel_profit_margin = 7
+                sel_mktg_expense = 0
+                if not is_novice_game:
+                    sel_loss_margin = 2
+                else:
+                    sel_loss_margin = 0  # Novice games get 0% even during OSFI intervention
                 osfi_alert = True
                 froze_lock = True
 
             claimtrend_obj = claimtrend_data.filter(year=selected_year).first()
             if claimtrend_obj:
                 claimtrend_dict = claimtrend_obj.claim_trends
-
-            reform_fact = []
-            for yr in reversed(clm_yrs):
-                reform_fact.append(claimtrend_dict['bi_reform'][f'{yr}'] or claimtrend_dict['cl_reform'][f'{yr}'])
+                reform_fact = []
+                for yr in reversed(clm_yrs):
+                    reform_fact.append(claimtrend_dict['bi_reform'][f'{yr}'] or claimtrend_dict['cl_reform'][f'{yr}'])
+            else:
+                reform_fact = [False] * len(clm_yrs)
 
             df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
             for i, devl_mth in enumerate(devl_mths):
@@ -1974,21 +2012,21 @@ def decision_input(request, game_id):
                         else:
                             display_df.iloc[i, n] = 0
                     lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
-                    est_values = perform_logistic_regression_indication(lcost, reform_fact, int(float(sel_loss_margin) * 10))
+                    est_values = perform_logistic_regression_indication(lcost, reform_fact, sel_loss_margin)
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 elif categ == 'Trend Adj':
                     for o in range(len(acc_yrs)):
                         display_df.iloc[i, o] = est_values['trend'][o]
-                        if float(sel_loss_margin) > 0:
+                        if int(sel_loss_margin) > 0:
                             prefix = '<span class="blue-text">'
                             postfix = '</span>'
-                        elif float(sel_loss_margin) < 0:
+                        elif int(sel_loss_margin) < 0:
                             prefix = '<span class="red-text">'
                             postfix = '</span>'
                         else:
                             prefix = ''
                             postfix = ''
-                    display_df_fmt.iloc[i] = prefix + display_df.iloc[i].map(lambda x: '' if x == 0 else prefix + '{:,.3f}'.format(x) + postfix)
+                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else prefix + '{:,.3f}'.format(x) + postfix)
                 elif categ == 'Reform Adj':
                     for p in range(len(acc_yrs)):
                         display_df.iloc[i, p] = est_values['reform'][p]
@@ -2004,39 +2042,12 @@ def decision_input(request, game_id):
 
                     wtd_lcost = sum(display_df.iloc[i] * display_df.iloc[i-1])
                     wtd_ind = i
-                elif categ == 'Fixed Expenses':
+                elif categ in ['Fixed Expenses', 'Expos Var Expenses', 'Prem Var Expenses', 'Marketing Expenses', 'Profit Margin', 'Indicated Premium', 'Current Premium', 'Rate Change']:
                     for s in range(len(acc_yrs)):
                         display_df.iloc[i, s] = 0
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
-                elif categ == 'Expos Var Expenses':
-                    for t in range(len(acc_yrs)):
-                        display_df.iloc[i, t] = 0
-                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
-                elif categ == 'Prem Var Expenses':
-                    for u in range(len(acc_yrs)):
-                        display_df.iloc[i, u] = 0
-                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
-                elif categ == 'Marketing Expenses':
-                    for v in range(len(acc_yrs)):
-                        display_df.iloc[i, v] = 0
-                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
-                elif categ == 'Profit Margin':
-                    for w in range(len(acc_yrs)):
-                        display_df.iloc[i, w] = 0
-                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
-                elif categ == 'Indicated Premium':
-                    for x in range(len(acc_yrs)):
-                        display_df.iloc[i, x] = 0
-                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
-                elif categ == 'Current Premium':
-                    for y in range(len(acc_yrs)):
-                        display_df.iloc[i, y] = 0
-                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
-                elif categ == 'Rate Change':
-                    for z in range(len(acc_yrs)):
-                        display_df.iloc[i, z] = 0
-                    display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 i += 1
+
             display_df_fmt.insert(0, f'Proj AY {max(clm_yrs) + 1}', '')
             display_df_fmt.iloc[wtd_ind, 0] = f'${wtd_lcost:,.2f}'
             if in_force != 0:
@@ -2048,10 +2059,10 @@ def decision_input(request, game_id):
                 current_prem = 0
             display_df_fmt.iloc[wtd_ind + 2, 0] = f'${round(expos_var_cost, 2):,.2f}'
             display_df_fmt.iloc[wtd_ind + 3, 0] = f'{round(prem_var_cost * 100, 1):,.1f}%'
-            display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(float(sel_mktg_expense))/10, 1):,.1f}%'
-            display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(float(sel_profit_margin))/10, 1):,.1f}%'
-            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - prem_var_cost - (decimal.Decimal(int(float(sel_mktg_expense))) / 1000) -
-                                                                          (decimal.Decimal(int(float(sel_profit_margin))) / 1000))), 2))
+            display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(sel_mktg_expense) / 10, 1):,.1f}%'
+            display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(sel_profit_margin) / 10, 1):,.1f}%'
+            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - prem_var_cost - (decimal.Decimal(int(sel_mktg_expense)) / 1000) -
+                                                                          (decimal.Decimal(int(sel_profit_margin)) / 1000))), 2))
             if request.POST.get('Submit') == 'Submit':
                 test_prem = request.session.get('indicated_prem', 0)
                 if test_prem != indicated_prem:
@@ -2061,11 +2072,17 @@ def decision_input(request, game_id):
                         messages.warning(request, "Another team-member is in the submission page.  Cannot submit.")
                         return redirect('Pricing-game_dashboard', game_id=game_id)
                     else:
-                        decision_obj.sel_profit_margin = int(float(sel_profit_margin) * 10)
-                        decision_obj.sel_exp_ratio_mktg = int(float(sel_mktg_expense) * 10)
-                        decision_obj.sel_loss_trend_margin = int(float(sel_loss_margin) * 10)
-                        decision_obj.sel_avg_prem = indicated_prem
-                        decision_obj.save()
+                        # CRITICAL FIX: Use atomic transaction to ensure consistency
+                        with transaction.atomic():
+                            decision_obj.sel_profit_margin = int(sel_profit_margin)
+                            decision_obj.sel_exp_ratio_mktg = int(sel_mktg_expense)
+                            if not is_novice_game:
+                                decision_obj.sel_loss_trend_margin = int(sel_loss_margin)
+                            else:
+                                decision_obj.sel_loss_trend_margin = 0  # Changed from 2 to 0 for Novice games
+                            decision_obj.sel_avg_prem = indicated_prem
+                            decision_obj.save()
+                            
                         request.session['locked_game_id'] = game_id
                         request.session['indicated_prem'] = indicated_prem
                         request.session['selected_year'] = selected_year
@@ -2080,7 +2097,6 @@ def decision_input(request, game_id):
             display_df_fmt.iloc[wtd_ind + 8, 0] = f'{round(100 * rate_chg, 1):,.1f}%'
 
             index_list = [8, 12, 16, 19]  # insert blank rows
-
             blank_row = pd.DataFrame([['' for _ in display_df_fmt.columns]], columns=display_df_fmt.columns)
             for index in index_list:
                 display_df_fmt = pd.concat([display_df_fmt.iloc[:index], blank_row, display_df_fmt.iloc[index:]])
@@ -2095,7 +2111,6 @@ def decision_input(request, game_id):
     else:
         financial_data_table = '<p>No financial data available.</p>'
 
-
     context = {
         'title': ' - Indication / Decisions',
         'game': game,
@@ -2107,14 +2122,14 @@ def decision_input(request, game_id):
         'mct_ratio': f'{round(100 * mct_ratio if mct_ratio is not None else 0, 1)}%',
         'mct_pass': mct_pass,
         'profit_margins': profit_margins,
-        'sel_profit_margin': f'{sel_profit_margin}',
+        'sel_profit_margin': f'{sel_profit_margin/10:.1f}',
         'mktg_expenses': mktg_expenses,
-        'sel_mktg_expense': f'{sel_mktg_expense}',
-        'loss_margins': loss_margins,
-        'sel_loss_margin': f'{sel_loss_margin}',
+        'sel_mktg_expense': f'{sel_mktg_expense/10:.1f}',
+        'sel_loss_margin': f'{sel_loss_margin/10:.1f}' if not is_novice_game else None,
         'froze_lock': froze_lock,
         'osfi_alert': osfi_alert,
         'decisions_locked': decisions_locked,
+        'is_novice_game': is_novice_game,
         'current_prem': f'${current_prem if current_prem is not None else 0:,.2f}',
         'indicated_prem': f'${indicated_prem if indicated_prem is not None else 0:,.2f}',
         'rate_chg': f'<span class="violet-text">{round(100 * rate_chg if rate_chg is not None else 0,1):,.1f}% </span>',
@@ -2133,6 +2148,15 @@ def decision_confirm(request, game_id):
             human_players.append(player.player_name)
     if game.game_observable is False and user.username not in human_players:
         raise Http404("You are not permitted to view the game.")
+    
+    # Determine game difficulty
+    is_novice_game = False
+    try:
+        game_prefs = GamePrefs.objects.get(user=game.initiator)
+        if game_prefs.game_difficulty == 'Novice':
+            is_novice_game = True
+    except GamePrefs.DoesNotExist:
+        pass
 
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         # Release the lock
@@ -2178,23 +2202,32 @@ def decision_confirm(request, game_id):
         if decision_obj.decisions_locked is True:
             messages.warning(request, f'Decisions already submitted for year: {decision_obj.year}')
             return redirect('Pricing-game_dashboard', game_id=game_id)
-        request.session['ret_from_confirm'] = False
-        decision_obj.decisions_locked = True
-        decision_obj.save()
+        
+        # CRITICAL FIX: Set decisions_locked = True BEFORE saving
+        # This ensures the database transaction is atomic and the server-side
+        # simulation will see the locked status immediately
+        with transaction.atomic():
+            decision_obj.decisions_locked = True
+            decision_obj.save()
+            
+            # Create the approval message AFTER locking decisions
+            # This ensures proper sequencing for the server simulation
+            message = ChatMessage(
+                from_user=None,
+                game_id=IndivGames.objects.get(game_id=game_id),
+                content=f'Regulatory filing for {request.user} approved.',
+            )
+            message.save()
 
-        # Release the lock
+        # Release the lock after successful submission
         try:
             Lock.release_lock(game_id, request.user)
             del request.session['locked_game_id']
         except:
             pass
+            
+        request.session['ret_from_confirm'] = False
         messages.success(request, f'Decisions submitted for year: {decision_obj.year}')
-        message = ChatMessage(
-            from_user=None,
-            game_id=IndivGames.objects.get(game_id=game_id),
-            content=f'Regulatory filing for {request.user} approved.',
-        )
-        message.save()
 
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
@@ -2216,8 +2249,9 @@ def decision_confirm(request, game_id):
         'indicated_prem': f'${final_avg_prem:,.2f}',
         'rate_chg': f'<span class="violet-text">{round(100 * rate_chg, 1):,.1f}% </span>',
         'sel_profit_margin': f'{decision_obj.sel_profit_margin/10:.1f}',
-        'sel_mktg_expense': f'{decision_obj.sel_exp_ratio_mktg/10:.1f}',
         'sel_loss_margin': f'{decision_obj.sel_loss_trend_margin/10:.1f}',
+        'sel_mktg_expense': f'{decision_obj.sel_exp_ratio_mktg/10:.1f}',
+        'is_novice_game': is_novice_game,
     }
 
     return render(request, template_name, context)

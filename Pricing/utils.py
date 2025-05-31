@@ -125,7 +125,7 @@ def perform_logistic_regression_indication(data, reform_fact, sel_loss_cost_marg
 
     model = LinearRegression(fit_intercept=True)
     model.fit(X, y)
-    exp_list = [(1 + .01 * int(sel_loss_cost_margin)) ** (1 + max(acc_yrs) - yr) for yr in acc_yrs]
+    exp_list = [(1 + .001 * int(sel_loss_cost_margin)) ** (1 + max(acc_yrs) - yr) for yr in acc_yrs]
 
     if reform:
         pred_df = df.drop(columns=['Ln_Value', 'Value'])

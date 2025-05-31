@@ -1831,13 +1831,13 @@ def decision_input(request, game_id):
                 froze_lock = True
                 decisions_locked = True
 
-            profit_margins = [f'{x}' for x in range(decision_obj.sel_profit_margin_min,
+            profit_margins = [f'{x/10:.1f}' for x in range(decision_obj.sel_profit_margin_min,
                                                1 + decision_obj.sel_profit_margin_max)]
 
-            mktg_expenses = [f'{x}' for x in range(decision_obj.sel_exp_ratio_mktg_min,
+            mktg_expenses = [f'{x/10:.1f}' for x in range(decision_obj.sel_exp_ratio_mktg_min,
                              1 + decision_obj.sel_exp_ratio_mktg_max)]
 
-            loss_margins = [f'{x}' for x in range(decision_obj.sel_loss_trend_margin_min,
+            loss_margins = [f'{x/10:.1f}' for x in range(decision_obj.sel_loss_trend_margin_min,
                                                    1 + decision_obj.sel_loss_trend_margin_max)]
 
             ret_from_confirm = request.session.get('ret_from_confirm', False)
@@ -1856,13 +1856,13 @@ def decision_input(request, game_id):
                 last_loss_margin = None
 
             if last_profit_margin is not None and sel_profit_margin is None:
-                sel_profit_margin = f'{last_profit_margin}'
+                sel_profit_margin = f'{last_profit_margin/10:.1f}'
 
             if last_mktg_expense is not None and sel_mktg_expense is None:
-                sel_mktg_expense = f'{last_mktg_expense}'
+                sel_mktg_expense = f'{last_mktg_expense/10:.1f}'
 
             if last_loss_margin is not None and sel_loss_margin is None:
-                sel_loss_margin = f'{last_loss_margin}'
+                sel_loss_margin = f'{last_loss_margin/10:.1f}'
 
             # pass_capital_test = 'Fail'
             if pass_capital_test == 'Pass':
@@ -1870,9 +1870,9 @@ def decision_input(request, game_id):
                 osfi_alert = False
             else:
                 mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
-                sel_profit_margin = '7'
-                sel_mktg_expense = '0'
-                sel_loss_margin = '2'
+                sel_profit_margin = '0.7'
+                sel_mktg_expense = '0.0'
+                sel_loss_margin = '0.2'
                 osfi_alert = True
                 froze_lock = True
 
@@ -1951,15 +1951,15 @@ def decision_input(request, game_id):
                         else:
                             display_df.iloc[i, n] = 0
                     lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
-                    est_values = perform_logistic_regression_indication(lcost, reform_fact, sel_loss_margin)
+                    est_values = perform_logistic_regression_indication(lcost, reform_fact, int(float(sel_loss_margin) * 10))
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.2f}'.format(x))
                 elif categ == 'Trend Adj':
                     for o in range(len(acc_yrs)):
                         display_df.iloc[i, o] = est_values['trend'][o]
-                        if int(sel_loss_margin) > 0:
+                        if float(sel_loss_margin) > 0:
                             prefix = '<span class="blue-text">'
                             postfix = '</span>'
-                        elif int(sel_loss_margin) < 0:
+                        elif float(sel_loss_margin) < 0:
                             prefix = '<span class="red-text">'
                             postfix = '</span>'
                         else:
@@ -2025,10 +2025,10 @@ def decision_input(request, game_id):
                 current_prem = 0
             display_df_fmt.iloc[wtd_ind + 2, 0] = f'${round(expos_var_cost, 2):,.2f}'
             display_df_fmt.iloc[wtd_ind + 3, 0] = f'{round(prem_var_cost * 100, 1):,.1f}%'
-            display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(sel_mktg_expense), 1):,.1f}%'
-            display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(sel_profit_margin), 1):,.1f}%'
-            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - prem_var_cost - (decimal.Decimal(int(sel_mktg_expense)) / 100) -
-                                                                          (decimal.Decimal(int(sel_profit_margin)) / 100))), 2))
+            display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(sel_mktg_expense)/10, 1):,.1f}%'
+            display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(sel_profit_margin)/10, 1):,.1f}%'
+            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - prem_var_cost - (decimal.Decimal(int(sel_mktg_expense)) / 1000) -
+                                                                          (decimal.Decimal(int(sel_profit_margin)) / 1000))), 2))
             if request.POST.get('Submit') == 'Submit':
                 test_prem = request.session.get('indicated_prem', 0)
                 if test_prem != indicated_prem:
@@ -2038,9 +2038,9 @@ def decision_input(request, game_id):
                         messages.warning(request, "Another team-member is in the submission page.  Cannot submit.")
                         return redirect('Pricing-game_dashboard', game_id=game_id)
                     else:
-                        decision_obj.sel_profit_margin = int(sel_profit_margin)
-                        decision_obj.sel_exp_ratio_mktg = int(sel_mktg_expense)
-                        decision_obj.sel_loss_trend_margin = int(sel_loss_margin)
+                        decision_obj.sel_profit_margin = int(float(sel_profit_margin) * 10)
+                        decision_obj.sel_exp_ratio_mktg = int(float(sel_mktg_expense) * 10)
+                        decision_obj.sel_loss_trend_margin = int(float(sel_loss_margin) * 10)
                         decision_obj.sel_avg_prem = indicated_prem
                         decision_obj.save()
                         request.session['locked_game_id'] = game_id
@@ -2192,9 +2192,9 @@ def decision_confirm(request, game_id):
         'current_prem': f'${curr_avg_prem:,.2f}',
         'indicated_prem': f'${final_avg_prem:,.2f}',
         'rate_chg': f'<span class="violet-text">{round(100 * rate_chg, 1):,.1f}% </span>',
-        'sel_profit_margin': f'{decision_obj.sel_profit_margin}',
-        'sel_mktg_expense': f'{decision_obj.sel_exp_ratio_mktg}',
-        'sel_loss_margin': f'{decision_obj.sel_loss_trend_margin}',
+        'sel_profit_margin': f'{decision_obj.sel_profit_margin/10:.1f}',
+        'sel_mktg_expense': f'{decision_obj.sel_exp_ratio_mktg/10:.1f}',
+        'sel_loss_margin': f'{decision_obj.sel_loss_trend_margin/10:.1f}',
     }
 
     return render(request, template_name, context)

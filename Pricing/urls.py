@@ -20,4 +20,5 @@ urlpatterns = [
     path('observe/', views.observe, name='Pricing-observe'),
     path('send_message/', views.send_message, name='send_message'),
     path('fetch_messages/', views.fetch_messages, name='fetch_messages'),
+    path('fetch_game_list/', views.fetch_game_list, name='fetch_game_list'),
     ]

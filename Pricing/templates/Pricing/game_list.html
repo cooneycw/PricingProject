@@ -11,10 +11,14 @@
                         <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Game Select" value="Back to Game Select"></input>
                         <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Refresh Listing" value="Refresh Listing"></input>
                     </form>
+                    <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                        <span id="auto-refresh-status">Auto-refresh: <span style="color: green;">ON</span></span> | 
+                        <span id="last-update">Last updated: <span id="last-update-time">{{ "now"|date:"H:i:s" }}</span></span>
+                    </div>
                 </div>
                 <div class="container" style="text-align: left; font-family: 'Roboto Mono'">
                     <h3 style="font-family: 'Montserrat'">Activated Games (pending start on the server / more players):</h3>
-                    <ul>
+                    <ul id="active-games-list">
                         {% for game in active_games %}
                             <li>
                                 {{ game.timestamp|date:"Y-m-d H:i:s" }} - {{ game.status|stringformat:"20s" }} - {{ game.game_type|stringformat:"20s" }}
@@ -44,4 +48,91 @@
             </div>
         </section>
     </main>
+
+    <script>
+        let autoRefreshInterval;
+        let isAutoRefreshActive = true;
+
+        function updateGameList() {
+            fetch('{% url "fetch_game_list" %}')
+                .then(response => response.json())
+                .then(data => {
+                    // Update active games
+                    const activeGamesList = document.getElementById('active-games-list');
+                    if (data.active_games.length === 0) {
+                        activeGamesList.innerHTML = '<li>No activated games presently.</li><br/>';
+                    } else {
+                        activeGamesList.innerHTML = data.active_games.map(game => {
+                            let waitingText = '';
+                            if (game.game_type !== 'individual' && game.additional_players_needed > 0) {
+                                waitingText = ` [waiting on ${game.additional_players_needed}]`;
+                            }
+                            return `<li>${game.timestamp} - ${game.status.padEnd(20)} - ${game.game_type.padEnd(20)}${waitingText}</li>`;
+                        }).join('');
+                    }
+
+                    // Update accessible games
+                    const accessibleGamesList = document.getElementById('accessible-games-list');
+                    if (data.accessible_games.length === 0) {
+                        accessibleGamesList.innerHTML = '<li>No games completed / running presently.</li><br/>';
+                    } else {
+                        accessibleGamesList.innerHTML = data.accessible_games.map(game => {
+                            return `<li><a href="/game_dashboard/${game.game_id}/">${game.timestamp} - ${game.status.padEnd(20)} - ${game.game_type.padEnd(20)}</a></li>`;
+                        }).join('');
+                    }
+
+                    // Update last update time
+                    const now = new Date();
+                    document.getElementById('last-update-time').textContent = now.toLocaleTimeString('en-GB', {hour12: false});
+                })
+                .catch(error => {
+                    console.error('Error fetching game list:', error);
+                });
+        }
+
+        function startAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            autoRefreshInterval = setInterval(updateGameList, 5000); // Refresh every 5 seconds
+            isAutoRefreshActive = true;
+            document.getElementById('auto-refresh-status').innerHTML = 'Auto-refresh: <span style="color: green;">ON</span>';
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            isAutoRefreshActive = false;
+            document.getElementById('auto-refresh-status').innerHTML = 'Auto-refresh: <span style="color: red;">OFF</span>';
+        }
+
+        // Toggle auto-refresh when status is clicked
+        document.getElementById('auto-refresh-status').addEventListener('click', function() {
+            if (isAutoRefreshActive) {
+                stopAutoRefresh();
+            } else {
+                startAutoRefresh();
+            }
+        });
+
+        // Start auto-refresh when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            startAutoRefresh();
+        });
+
+        // Stop auto-refresh when user is about to leave the page
+        window.addEventListener('beforeunload', function() {
+            stopAutoRefresh();
+        });
+
+        // Pause auto-refresh when page is not visible, resume when visible
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else {
+                startAutoRefresh();
+            }
+        });
+    </script>
 {% endblock content %}

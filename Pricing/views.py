@@ -2247,3 +2247,60 @@ def fetch_messages(request):
         message_list = message_list[-50:]
 
         return JsonResponse({"messages": message_list, "review_cnt": review_cnt})
+
+
+@login_required
+def fetch_game_list(request):
+    if request.method == 'GET':
+        user = request.user
+        player_game_ids = Players.objects.filter(player_id=user).values_list('game', flat=True)
+
+        all_games = IndivGames.objects.filter(
+            Q(initiator=user) | Q(game_id__in=player_game_ids)
+        ).order_by('-timestamp').annotate(
+            game_type=Case(
+                When(human_player_cnt=1, then=Value('individual')),
+                default=Value('group'),
+                output_field=CharField(),
+            )
+        )
+
+        all_games = all_games.annotate(
+            current_human_player_cnt=Count(
+                'players',
+                filter=Q(players__player_type='user')))
+
+        for game in all_games:
+            game.additional_players_needed = game.human_player_cnt - game.current_human_player_cnt
+
+        active_games = [
+            game for game in all_games if game.status in ['active', 'waiting for players']
+        ]
+        accessible_games = [
+            game for game in all_games if game.status in ['running', 'completed']
+        ]
+
+        # Convert games to JSON-serializable format
+        active_games_data = []
+        for game in active_games:
+            active_games_data.append({
+                'game_id': game.game_id,
+                'timestamp': game.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'status': game.status,
+                'game_type': game.game_type,
+                'additional_players_needed': game.additional_players_needed if game.game_type != 'individual' else 0
+            })
+
+        accessible_games_data = []
+        for game in accessible_games:
+            accessible_games_data.append({
+                'game_id': game.game_id,
+                'timestamp': game.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'status': game.status,
+                'game_type': game.game_type
+            })
+
+        return JsonResponse({
+            "active_games": active_games_data,
+            "accessible_games": accessible_games_data
+        })

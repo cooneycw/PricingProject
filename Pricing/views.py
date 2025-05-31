@@ -1907,6 +1907,23 @@ def decision_input(request, game_id):
                 last_mktg_expense = decision_obj_last.sel_exp_ratio_mktg
                 if not is_novice_game:
                     last_trend_loss_margin = decision_obj_last.sel_loss_trend_margin
+                
+                # Check if previous year's values look like they were affected by OSFI scaling bug
+                # (i.e., single-digit profit margins that should be OSFI mandated values)
+                if last_profit_margin <= 15 and last_mktg_expense == 0:  # Likely OSFI intervention with scaling bug
+                    print(f"DEBUG: Detected legacy OSFI values from previous year - correcting scaling")
+                    print(f"DEBUG: Original values: profit={last_profit_margin}, mktg={last_mktg_expense}")
+                    
+                    # Apply proper OSFI defaults with correct scaling
+                    if is_novice_game:
+                        last_profit_margin = 100  # 10.0%
+                    else:
+                        last_profit_margin = 70   # 7.0%
+                    last_mktg_expense = 0  # 0.0% (already correct)
+                    if not is_novice_game:
+                        last_trend_loss_margin = 20  # 2.0%
+                    
+                    print(f"DEBUG: Corrected values: profit={last_profit_margin}, mktg={last_mktg_expense}")
             else:
                 # First year defaults
                 last_profit_margin = 7  # 7%
@@ -1947,7 +1964,7 @@ def decision_input(request, game_id):
                     
                 sel_mktg_expense = 0
                 if not is_novice_game:
-                    sel_trend_loss_margin = 2
+                    sel_trend_loss_margin = 20  # 2.0% (stored as tenths)
                 else:
                     sel_trend_loss_margin = 0  # Novice games get 0% even during OSFI intervention
                     

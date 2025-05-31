@@ -10,7 +10,7 @@
                         {% for game in accessible_games %}
                             <li>
                                 <a href="{% url 'Pricing-join_group_game' game_id=game.game_id %}">
-                                    {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.initiator_name }}
+                                    {{ game.timestamp|date:"SHORT_DATETIME_FORMAT" }} - {{ game.status }} - {{ game.initiator_name }} - {{ game.difficulty }}
                                 </a>
                                 {% if game.game_type == 'group' and game.status == 'waiting for players' %}
                                     [additional players needed: {{ game.additional_players_needed }}]
@@ -70,6 +70,13 @@
                                     <label for="{{ form.default_selection_type.id_for_label }}" style="flex: 1;">{{ form.default_selection_type.label }}</label>
                                     <div style="flex: 1; text-align: right;">
                                         {{ form.default_selection_type }}
+                                    </div>
+                                </div>
+                                <br/>
+                                <div class="form-group" style="text-align: left; display: flex; align-items: center;">
+                                    <label for="{{ form.game_difficulty.id_for_label }}" style="flex: 1;">{{ form.game_difficulty.label }}</label>
+                                    <div style="flex: 1; text-align: right;">
+                                        {{ form.game_difficulty }}
                                     </div>
                                 </div>
                                 <br/>

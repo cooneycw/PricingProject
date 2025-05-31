@@ -20,6 +20,17 @@ from .models import GamePrefs, IndivGames, Players, MktgSales, Financials, Indus
 pd.set_option('display.max_columns', None)  # None means show all columns
 
 
+def get_force_term(game):
+    """Helper function to return 'Customers' for Novice games, 'In-Force' otherwise"""
+    try:
+        game_prefs = GamePrefs.objects.get(user=game.initiator)
+        if game_prefs.game_difficulty == 'Novice':
+            return 'Customers'
+    except GamePrefs.DoesNotExist:
+        pass
+    return 'In-Force'
+
+
 # Create your views here.
 def home(request):
     title = 'Insurance Pricing Game: Home Page'
@@ -193,6 +204,12 @@ def group(request):
 
     for game in accessible_games:
         game.additional_players_needed = game.human_player_cnt - game.current_human_player_cnt
+        # Add game difficulty information
+        try:
+            game_prefs = GamePrefs.objects.get(user=game.initiator)
+            game.difficulty = game_prefs.game_difficulty
+        except GamePrefs.DoesNotExist:
+            game.difficulty = 'Expert'  # Default to Expert if no preferences found
 
     if request.method == 'POST':
         form = GamePrefsForm(request.POST)
@@ -217,6 +234,7 @@ def group(request):
                     'sel_type_03': form.cleaned_data['sel_type_03'],
                     'game_observable': form.cleaned_data['game_observable'],
                     'default_selection_type': form.cleaned_data['default_selection_type'],
+                    'game_difficulty': form.cleaned_data['game_difficulty'],
                 }
             )
 
@@ -533,7 +551,7 @@ def mktgsales_report(request, game_id):
             for index, row in transposed_df.iterrows():
                 if index == 'beg_in_force':
                     # Rename and format the 'written_premium' row
-                    new_row_name = 'Beginning-In-Force'
+                    new_row_name = f'Beginning-{get_force_term(game)}'
                     transposed_df.loc[index] = row.apply(
                         lambda x: f"{int(x):,}")  # formatting as currency without decimals
                 elif index == 'mktg_expense':
@@ -559,11 +577,11 @@ def mktgsales_report(request, game_id):
                     transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as currency without decimals
                 elif index == 'end_in_force':
                     # Rename and format the 'in_force' row
-                    new_row_name = 'Ending-In-Force'
+                    new_row_name = f'Ending-{get_force_term(game)}'
                     transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
                 elif index == 'in_force_ind':
                     # Rename and format the 'in_force' row
-                    new_row_name = 'Industry-In-Force'
+                    new_row_name = f'Industry-{get_force_term(game)}'
                     transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
 
                 # Apply renaming to make the index/rows human-readable
@@ -576,9 +594,10 @@ def mktgsales_report(request, game_id):
                 quotes = float(transposed_df.at['Quotes', year].replace(',', ''))
                 sales = float(transposed_df.at['Sales', year].replace(',', ''))
                 canx = float(transposed_df.at['Cancellations', year].replace(',', ''))
-                in_force = float(transposed_df.at['Beginning-In-Force', year].replace(',', ''))
-                in_force_end = float(transposed_df.at['Ending-In-Force', year].replace(',', ''))
-                in_force_ind = float(transposed_df.at['Industry-In-Force', year].replace(',', ''))
+                force_term = get_force_term(game)
+                in_force = float(transposed_df.at[f'Beginning-{force_term}', year].replace(',', ''))
+                in_force_end = float(transposed_df.at[f'Ending-{force_term}', year].replace(',', ''))
+                in_force_ind = float(transposed_df.at[f'Industry-{force_term}', year].replace(',', ''))
                 marketing_expense = float(transposed_df.at['Marketing Expense', year].replace('$', '').replace(',', ''))
                 industry_marketing_expense = float(
                     transposed_df.at['Industry Marketing Expense', year].replace('$', '').replace(',', ''))
@@ -627,7 +646,8 @@ def mktgsales_report(request, game_id):
             df_bottom_retention = transposed_df_close.iloc[insert_position_retention:]
             transposed_df_retention = pd.concat([df_top_retention, retention_ratio_df, df_bottom_retention])
 
-            insert_position_mktshare = transposed_df_retention.index.get_loc('Industry-In-Force') + 1
+            force_term = get_force_term(game)
+            insert_position_mktshare = transposed_df_retention.index.get_loc(f'Industry-{force_term}') + 1
             df_top_mktshare = transposed_df_retention.iloc[:insert_position_mktshare]
             df_bottom_mktshare = transposed_df_close.iloc[insert_position_mktshare:]
             transposed_df = pd.concat([df_top_mktshare, mkt_share_ratio_df, df_bottom_mktshare])
@@ -744,7 +764,7 @@ def financials_report(request, game_id):
                         lambda x: f"${round(x):,}")  # formatting as currency without decimals
                 elif index == 'in_force':
                     # Rename and format the 'in_force' row
-                    new_row_name = 'In-force'
+                    new_row_name = get_force_term(game)
                     transposed_df.loc[index] = row.apply(lambda x: f"{int(x):,}")  # formatting as an integer
                 elif index == 'inv_income':
                     # Rename and format the 'in_force' row
@@ -874,7 +894,8 @@ def industry_reports(request, game_id):
     default_player_id = None
     player_id_list = []
     player_list = []
-    distinct_players.remove(request.user.username)
+    if request.user.username in distinct_players:
+        distinct_players.remove(request.user.username)
     distinct_players.insert(0, request.user.username)
     for count_id, unique_player in enumerate(distinct_players):
         player_name = f"{unique_player}"
@@ -1127,7 +1148,8 @@ def valuation_report(request, game_id):
     default_player_id = None
     player_id_list = []
     player_list = []
-    distinct_players.remove(request.user.username)
+    if request.user.username in distinct_players:
+        distinct_players.remove(request.user.username)
     distinct_players.insert(0, request.user.username)
     for count_id, unique_player in enumerate(distinct_players):
         # player_name = f"{1 + count_id:02d} - {unique_player}"
@@ -1228,7 +1250,7 @@ def valuation_report(request, game_id):
             for index, row in transposed_df.iterrows():
                 if index == 'in_force':
                     # Rename and format the 'written_premium' row
-                    new_row_name = 'In-Force'
+                    new_row_name = get_force_term(game)
                     transposed_df.loc[index] = row.apply(
                         lambda x: f"{x:,}")  # formatting as currency without decimals
                 elif index == 'capped_growth_rate':
@@ -1263,8 +1285,9 @@ def valuation_report(request, game_id):
                     new_row_name = 'Valuation Rank'
 
                 transposed_df.rename(index={index: new_row_name}, inplace=True)
+            force_term = get_force_term(game)
             row_order = {
-                'In-Force': 0,
+                force_term: 0,
                 'Capped Growth Rate': 1,
                 'Avg Profit / Client': 2,
                 'Future Proj Value (MM)': 3,
@@ -1565,7 +1588,7 @@ def claim_trend_report(request, game_id):
                     fact_df.iloc[2, 0] = numerator / denominator
                     fact_df.iloc[1, 0] = fact_df.iloc[1, 0] * fact_df.iloc[2, 0]
 
-            cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost', 'Claim Count', 'Frequency', 'Severity', 'Product Reform']
+            cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', get_force_term(game), 'Loss Cost', 'Claim Count', 'Frequency', 'Severity', 'Product Reform']
             proj_cols = ['Est Loss Cost', 'Est LC Trend', 'Est LC Reform', 'Est Frequency', 'Est Freq Trend',
                          'Est Freq Reform', 'Est Severity', 'Est Sev Trend', 'Est Sev Reform']
             display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
@@ -1595,7 +1618,7 @@ def claim_trend_report(request, game_id):
                     for l in range(len(acc_yrs)):
                         display_df.iloc[i, l] = display_df.iloc[i - 2, l] * display_df.iloc[i - 1, l]
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
-                elif categ == 'In-Force':
+                elif categ == get_force_term(game):
                     for m in range(len(acc_yrs)):
                         display_df.iloc[i, m] = financial_df.iloc[len(financial_df) - m - 1 - (max(unique_years) - selected_year), 1]
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
@@ -1775,13 +1798,13 @@ def decision_input(request, game_id):
     selected_year = int(selected_year) if selected_year else None
 
     sel_profit_margin = request.POST.get('profit')
-    sel_profit_margin = int(sel_profit_margin) if sel_profit_margin else None
+    sel_profit_margin = sel_profit_margin if sel_profit_margin else None
 
     sel_mktg_expense = request.POST.get('mktg')
-    sel_mktg_expense = int(sel_mktg_expense) if sel_mktg_expense else None
+    sel_mktg_expense = sel_mktg_expense if sel_mktg_expense else None
 
     sel_loss_margin = request.POST.get('loss')
-    sel_loss_margin = int(sel_loss_margin) if sel_loss_margin else None
+    sel_loss_margin = sel_loss_margin if sel_loss_margin else None
 
     template_name = 'Pricing/decision_input.html'
 
@@ -1870,9 +1893,9 @@ def decision_input(request, game_id):
                 osfi_alert = False
             else:
                 mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
-                sel_profit_margin = '0.7'
+                sel_profit_margin = '7.0'  # Instead of '0.7'
                 sel_mktg_expense = '0.0'
-                sel_loss_margin = '0.2'
+                sel_loss_margin = '2.0'    # Instead of '0.2'
                 osfi_alert = True
                 froze_lock = True
 
@@ -1912,7 +1935,7 @@ def decision_input(request, game_id):
                     fact_df.iloc[2, 0] = numerator / denominator
                     fact_df.iloc[1, 0] = fact_df.iloc[1, 0] * fact_df.iloc[2, 0]
 
-            cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost', 'Trend Adj', 'Reform Adj', 'Weights',
+            cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', get_force_term(game), 'Loss Cost', 'Trend Adj', 'Reform Adj', 'Weights',
                     'Adj Loss Cost', 'Fixed Expenses', 'Expos Var Expenses', 'Prem Var Expenses', 'Marketing Expenses', 'Profit Margin',
                     'Current Premium', 'Indicated Premium', 'Rate Change']
             display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in clm_yrs]
@@ -1938,7 +1961,7 @@ def decision_input(request, game_id):
                     for l in range(len(acc_yrs)):
                         display_df.iloc[i, l] = display_df.iloc[i - 2, l] * display_df.iloc[i - 1, l]
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '${:,.0f}'.format(x))
-                elif categ == 'In-Force':
+                elif categ == get_force_term(game):
                     for m in range(len(acc_yrs)):
                         display_df.iloc[i, m] = financial_df.iloc[len(financial_df) - m - 1 - (max(unique_years) - selected_year), 1]
                     display_df_fmt.iloc[i] = display_df.iloc[i].map(lambda x: '' if x == 0 else '{:,.0f}'.format(x))
@@ -2025,10 +2048,10 @@ def decision_input(request, game_id):
                 current_prem = 0
             display_df_fmt.iloc[wtd_ind + 2, 0] = f'${round(expos_var_cost, 2):,.2f}'
             display_df_fmt.iloc[wtd_ind + 3, 0] = f'{round(prem_var_cost * 100, 1):,.1f}%'
-            display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(sel_mktg_expense)/10, 1):,.1f}%'
-            display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(sel_profit_margin)/10, 1):,.1f}%'
-            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - prem_var_cost - (decimal.Decimal(int(sel_mktg_expense)) / 1000) -
-                                                                          (decimal.Decimal(int(sel_profit_margin)) / 1000))), 2))
+            display_df_fmt.iloc[wtd_ind + 4, 0] = f'{round(int(float(sel_mktg_expense))/10, 1):,.1f}%'
+            display_df_fmt.iloc[wtd_ind + 5, 0] = f'{round(int(float(sel_profit_margin))/10, 1):,.1f}%'
+            indicated_prem = float(round(((wtd_lcost + expos_var_cost + fixed_cost) / (1 - prem_var_cost - (decimal.Decimal(int(float(sel_mktg_expense))) / 1000) -
+                                                                          (decimal.Decimal(int(float(sel_profit_margin))) / 1000))), 2))
             if request.POST.get('Submit') == 'Submit':
                 test_prem = request.session.get('indicated_prem', 0)
                 if test_prem != indicated_prem:

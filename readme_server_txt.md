@@ -91,3 +91,56 @@ Templates should display the decimal format:
 | One percent | 2 | 2% | 10 | 1.0% |
 | Two percent | 4 | 4% | 20 | 2.0% |
 | Ten percent | 10 | 10% | 100 | 10.0% | 
+
+# Terminology Change: In-Force vs Customers
+
+## Overview
+For games with difficulty level set to "Novice", all references to "In-Force" should be displayed as "Customers" instead.
+
+## Implementation
+A helper function `get_force_term(game)` has been added to views.py:
+```python
+def get_force_term(game):
+    """Helper function to return 'Customers' for Novice games, 'In-Force' otherwise"""
+    try:
+        game_prefs = GamePrefs.objects.get(user=game.initiator)
+        if game_prefs.game_difficulty == 'Novice':
+            return 'Customers'
+    except GamePrefs.DoesNotExist:
+        pass
+    return 'In-Force'
+```
+
+## Affected Views
+The following views have been updated to use dynamic terminology:
+- **mktgsales_report**: "Beginning-In-Force", "Ending-In-Force", "Industry-In-Force"
+- **financials_report**: "In-Force"
+- **valuation_report**: "In-Force"
+- **claim_trend_report**: "In-Force"
+- **decision_input**: "In-Force"
+
+## Group Page Updates
+The group page has been updated to display game difficulty information:
+- **Group game listings** now show difficulty level (Novice/Expert) for each available game
+- **Group game creation form** includes game difficulty selection field
+- **Group view** adds difficulty information to accessible games by looking up initiator's GamePrefs
+
+## Usage Pattern
+```python
+# Instead of hardcoded strings like:
+new_row_name = 'In-Force'
+
+# Use:
+new_row_name = get_force_term(game)
+
+# For prefixed/suffixed versions:
+new_row_name = f'Beginning-{get_force_term(game)}'
+new_row_name = f'Industry-{get_force_term(game)}'
+```
+
+## Server-Side Requirements
+When implementing server-side logic, check the game difficulty and adjust terminology accordingly:
+- **Novice games**: Use "Customers" terminology
+- **Expert games**: Use "In-Force" terminology
+
+The game difficulty can be accessed via the `GamePrefs` model using the game's initiator user. 

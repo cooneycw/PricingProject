@@ -18,6 +18,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import RedirectView
 from users import views as users_views
 
 
@@ -27,6 +28,7 @@ urlpatterns = [
     path('profile/', users_views.profile, name='profile'),
     path('login/', auth_views.LoginView.as_view(template_name='users/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(template_name='users/logout.html'), name='logout'),
+    path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'Pricing/008_decisions.png', permanent=True)),
     path('', include('Pricing.urls')),
 
 ]

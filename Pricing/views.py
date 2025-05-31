@@ -1807,6 +1807,7 @@ def decision_input(request, game_id):
     froze_lock = False
     decisions_locked = False
     is_novice_game = False
+    osfi_intervention = False  # New flag to track actual OSFI intervention
 
     # Determine game difficulty
     try:
@@ -1871,9 +1872,14 @@ def decision_input(request, game_id):
             
             decision_obj_last = Decisions.objects.filter(game_id=game, player_id=user, year=selected_year-1).first()
 
+            # Check if decisions are locked (historical)
             if decision_obj.decisions_locked == True:
-                froze_lock = True
                 decisions_locked = True
+
+            # Determine OSFI intervention based on capital test
+            if pass_capital_test != 'Pass':
+                osfi_intervention = True
+                froze_lock = True  # Only freeze for actual OSFI intervention
 
             # Get min/max ranges from server-side configuration - no hard-coded fallbacks
             profit_min = decision_obj.sel_profit_margin_min
@@ -1915,26 +1921,35 @@ def decision_input(request, game_id):
                 else:
                     sel_trend_loss_margin = 0
                 request.session['ret_from_confirm'] = False
-            elif decision_obj_last:
-                # Use previous year's values as defaults if user hasn't made selections
-                if sel_profit_margin is None:
-                    sel_profit_margin = decision_obj_last.sel_profit_margin
-                if sel_mktg_expense is None:
-                    sel_mktg_expense = decision_obj_last.sel_exp_ratio_mktg
-                if not is_novice_game and sel_trend_loss_margin is None:
-                    sel_trend_loss_margin = decision_obj_last.sel_loss_trend_margin
-                elif is_novice_game:
-                    sel_trend_loss_margin = 0
             else:
-                # First year - use server-provided current values or middle of range
+                # For initial page load (no form submission) - always start with database values
                 if sel_profit_margin is None:
-                    sel_profit_margin = decision_obj.sel_profit_margin or ((profit_min + profit_max) // 2)
+                    sel_profit_margin = decision_obj.sel_profit_margin
                 if sel_mktg_expense is None:
-                    sel_mktg_expense = decision_obj.sel_exp_ratio_mktg or ((mktg_min + mktg_max) // 2)
+                    sel_mktg_expense = decision_obj.sel_exp_ratio_mktg
                 if not is_novice_game and sel_trend_loss_margin is None:
-                    sel_trend_loss_margin = decision_obj.sel_loss_trend_margin or ((trend_loss_min + trend_loss_max) // 2)
+                    sel_trend_loss_margin = decision_obj.sel_loss_trend_margin
                 elif is_novice_game:
                     sel_trend_loss_margin = 0
+                
+                # If database values are missing, use previous year or defaults
+                if sel_profit_margin is None:
+                    if decision_obj_last:
+                        sel_profit_margin = decision_obj_last.sel_profit_margin
+                    else:
+                        sel_profit_margin = (profit_min + profit_max) // 2
+                        
+                if sel_mktg_expense is None:
+                    if decision_obj_last:
+                        sel_mktg_expense = decision_obj_last.sel_exp_ratio_mktg  
+                    else:
+                        sel_mktg_expense = (mktg_min + mktg_max) // 2
+                        
+                if not is_novice_game and sel_trend_loss_margin is None:
+                    if decision_obj_last:
+                        sel_trend_loss_margin = decision_obj_last.sel_loss_trend_margin
+                    else:
+                        sel_trend_loss_margin = (trend_loss_min + trend_loss_max) // 2
 
             # Determine OSFI alert status from server-side pass_capital_test
             if pass_capital_test == 'Pass':
@@ -1943,7 +1958,6 @@ def decision_input(request, game_id):
             else:
                 mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
                 osfi_alert = True
-                froze_lock = True
                 # Note: OSFI intervention values should already be set by server-side game logic
                 # GUI just reads and displays the server-mandated values
 
@@ -2143,6 +2157,7 @@ def decision_input(request, game_id):
         'sel_trend_loss_margin': f'{sel_trend_loss_margin/10:.1f}' if not is_novice_game else None,
         'froze_lock': froze_lock,
         'osfi_alert': osfi_alert,
+        'osfi_intervention': osfi_intervention,  # New flag to distinguish OSFI intervention from historical locks
         'decisions_locked': decisions_locked,
         'is_novice_game': is_novice_game,
         'current_prem': f'${current_prem if current_prem is not None else 0:,.2f}',

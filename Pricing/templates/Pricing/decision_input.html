@@ -55,8 +55,13 @@
                                         {% csrf_token %}
                                         <div class="decis">
                                             <label for="profit">Selected Profit Margin (%):</label>
-                                            {% if froze_lock %}
+                                            {% if osfi_intervention %}
                                                 <span style="font-weight: bold; color: #ff0000;">{{ sel_profit_margin }}% (OSFI Mandated)</span>
+                                                <select id="profit" name="profit" disabled style="display: none;">
+                                                    <option value="{{ sel_profit_margin }}" selected>{{ sel_profit_margin }}</option>
+                                                </select>
+                                            {% elif decisions_locked %}
+                                                <span style="font-weight: bold;">{{ sel_profit_margin }}%</span>
                                                 <select id="profit" name="profit" disabled style="display: none;">
                                                     <option value="{{ sel_profit_margin }}" selected>{{ sel_profit_margin }}</option>
                                                 </select>
@@ -72,8 +77,13 @@
                                         </div>
                                         <div class="decis">
                                             <label for="mktg" style="margin-right: 10px;">Selected Marketing Expense (%):</label>
-                                            {% if froze_lock %}
+                                            {% if osfi_intervention %}
                                                 <span style="font-weight: bold; color: #ff0000;">{{ sel_mktg_expense }}% (OSFI Mandated)</span>
+                                                <select id="mktg" name="mktg" disabled style="display: none;">
+                                                    <option value="{{ sel_mktg_expense }}" selected>{{ sel_mktg_expense }}</option>
+                                                </select>
+                                            {% elif decisions_locked %}
+                                                <span style="font-weight: bold;">{{ sel_mktg_expense }}%</span>
                                                 <select id="mktg" name="mktg" disabled style="display: none;">
                                                     <option value="{{ sel_mktg_expense }}" selected>{{ sel_mktg_expense }}</option>
                                                 </select>
@@ -90,8 +100,13 @@
                                         {% if not is_novice_game %}
                                         <div class="decis">
                                             <label for="loss" style="margin-right: 18px;">Selected Loss Trend Margin (%):</label>
-                                            {% if froze_lock %}
+                                            {% if osfi_intervention %}
                                                 <span style="font-weight: bold; color: #ff0000;">{{ sel_trend_loss_margin }}% (OSFI Mandated)</span>
+                                                <select id="loss" name="loss" disabled style="display: none;">
+                                                    <option value="{{ sel_trend_loss_margin }}" selected>{{ sel_trend_loss_margin }}</option>
+                                                </select>
+                                            {% elif decisions_locked %}
+                                                <span style="font-weight: bold;">{{ sel_trend_loss_margin }}%</span>
                                                 <select id="loss" name="loss" disabled style="display: none;">
                                                     <option value="{{ sel_trend_loss_margin }}" selected>{{ sel_trend_loss_margin }}</option>
                                                 </select>

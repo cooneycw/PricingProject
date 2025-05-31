@@ -1931,16 +1931,27 @@ def decision_input(request, game_id):
                 osfi_alert = False
             else:
                 mct_pass = '<span class="red-text"><b>' + pass_capital_test + '</b></span>'
+                # Debug: Print game difficulty and OSFI override values
+                print(f"DEBUG: OSFI FAILURE - Game ID: {game_id}, User: {user}")
+                print(f"DEBUG: is_novice_game: {is_novice_game}")
+                print(f"DEBUG: pass_capital_test: {pass_capital_test}")
+                print(f"DEBUG: Original sel_profit_margin: {sel_profit_margin}")
+                
                 # Override with OSFI mandated values
                 if is_novice_game:
-                    sel_profit_margin = 10
+                    sel_profit_margin = 100  # 10.0% (stored as tenths)
+                    print(f"DEBUG: Setting profit margin to 10% for Novice game")
                 else:
-                    sel_profit_margin = 7
+                    sel_profit_margin = 70   # 7.0% (stored as tenths)
+                    print(f"DEBUG: Setting profit margin to 7% for Expert game")
+                    
                 sel_mktg_expense = 0
                 if not is_novice_game:
                     sel_trend_loss_margin = 2
                 else:
                     sel_trend_loss_margin = 0  # Novice games get 0% even during OSFI intervention
+                    
+                print(f"DEBUG: Final values - profit_margin: {sel_profit_margin}, mktg_expense: {sel_mktg_expense}, trend_loss_margin: {sel_trend_loss_margin}")
                 osfi_alert = True
                 froze_lock = True
 

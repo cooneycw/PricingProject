@@ -2306,9 +2306,10 @@ def fetch_game_list(request):
         # Convert games to JSON-serializable format
         active_games_data = []
         for game in active_games:
+            local_timestamp = timezone.localtime(game.timestamp)
             active_games_data.append({
                 'game_id': game.game_id,
-                'timestamp': game.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'timestamp': local_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                 'status': game.status,
                 'game_type': game.game_type,
                 'additional_players_needed': game.additional_players_needed if game.game_type != 'individual' else 0
@@ -2316,9 +2317,10 @@ def fetch_game_list(request):
 
         accessible_games_data = []
         for game in accessible_games:
+            local_timestamp = timezone.localtime(game.timestamp)
             accessible_games_data.append({
                 'game_id': game.game_id,
-                'timestamp': game.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'timestamp': local_timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                 'status': game.status,
                 'game_type': game.game_type
             })

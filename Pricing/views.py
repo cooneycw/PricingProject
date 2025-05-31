@@ -1876,8 +1876,8 @@ def decision_input(request, game_id):
                 decisions_locked = True
 
             # Use the actual min/max ranges from the database
-            # Get min/max values from decision object, but use sensible business minimums if database has 0
-            profit_min = getattr(decision_obj, 'sel_profit_margin_min', 40) or 40  # Use 4.0% minimum if db is 0
+            # Get min/max values from decision object, respecting actual database values (even if 0)
+            profit_min = getattr(decision_obj, 'sel_profit_margin_min', 40)  # Use database value or default 4.0%
             profit_max = getattr(decision_obj, 'sel_profit_margin_max', 110) or 110  # Default 11.0%
             mktg_min = getattr(decision_obj, 'sel_exp_ratio_mktg_min', 0)  # 0.0% is valid for marketing
             mktg_max = getattr(decision_obj, 'sel_exp_ratio_mktg_max', 60) or 60  # Default 6.0%

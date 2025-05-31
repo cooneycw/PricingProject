@@ -33,22 +33,28 @@
                                     </div>
                                     <input type="submit" value="Select" class="btn btn-primary btn-sm">
                                 </form>
-                                <button id="toggleViewBtn" class="btn btn-info btn-sm">Toggle View</button>
+                                <!-- Button default state: Table visible, button prompts to show chart -->
+                                <button id="toggleViewBtn" class="btn btn-outline-warning btn-sm">Show Chart</button>
                             </div>
                             <hr>
-                            <div class="mktgsales-data-table">
+                            <div class="mktgsales-data-table" style="{{ initial_table_style|default:'display: block;' }}">
                                 {{ financial_data_table|safe }}
                             </div>
-                            <div id="mktgSalesChart" style="display: none;"></div>
+                            <div id="activityChart" style="{{ initial_chart_style|default:'display: none;' }}"></div>
+                            <div id="financialRatioChart" style="{{ initial_chart_style|default:'display: none;' }}; margin-top: 20px;"></div>
+                            <div id="ratiosChart" style="{{ initial_chart_style|default:'display: none;' }}; margin-top: 20px;"></div>
                         </div>
 
                 {% endif %}
             </div>
         </section>
     </main>
+ {{ chart_data|json_script:"chartDataJson" }}
  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
  <script>
+    console.log("MktgSales Report SCRIPT START");
     document.addEventListener('DOMContentLoaded', function() {
+        console.log("DOMContentLoaded event fired.");
         // Select all table rows within the financial-data-table
         var tableRows = document.querySelectorAll('.mktgsales-data-table tr');
 
@@ -73,9 +79,10 @@
         // Chart and Toggle Logic
         const toggleButton = document.getElementById('toggleViewBtn');
         const tableContainer = document.querySelector('.mktgsales-data-table');
-        const chartContainer = document.getElementById('mktgSalesChart');
-        
-        // Safely parse JSON data passed from Django template
+        const activityChartContainer = document.getElementById('activityChart'); 
+        const financialRatioChartContainer = document.getElementById('financialRatioChart'); 
+        const ratiosChartContainer = document.getElementById('ratiosChart'); // New chart container
+
         let isNoviceGame = false;
         try {
             isNoviceGame = JSON.parse("{{ is_novice_game|yesno:'true,false,null' }}");
@@ -84,119 +91,307 @@
         }
 
         let chartData = null;
-        try {
-            chartData = JSON.parse("{{ chart_data|escapejs }}");
-        } catch (e) {
-            console.error('Error parsing chart_data:', e);
-            // If chart_data is problematic, ensure chart-related elements are hidden/disabled
-            if (toggleButton) toggleButton.style.display = 'none';
-            if (chartContainer) chartContainer.style.display = 'none';
-            return; // Exit if chart data is unusable
+        const chartDataElement = document.getElementById('chartDataJson');
+        if (chartDataElement) {
+            try {
+                chartData = JSON.parse(chartDataElement.textContent);
+            } catch (e) {
+                console.error('Error parsing chart_data from json_script:', e);
+                if (toggleButton) toggleButton.style.display = 'none';
+                if (activityChartContainer) activityChartContainer.style.display = 'none';
+                if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
+                if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
+                return;
+            }
+        } else if ("{{chart_data}}" === "None" || "{{chart_data}}" === "") {
+             console.log('chart_data was None or empty in Django context, chartData will remain null.');
+        }
+
+        function setButtonState(showChart) {
+            if (toggleButton) {
+                if (showChart) {
+                    toggleButton.textContent = 'Show Table';
+                    toggleButton.classList.remove('btn-outline-warning');
+                    toggleButton.classList.add('btn-primary');
+                } else {
+                    toggleButton.textContent = 'Show Chart';
+                    toggleButton.classList.remove('btn-primary');
+                    toggleButton.classList.add('btn-outline-warning');
+                }
+            }
+        }
+
+        if (isNoviceGame) {
+            console.log('Novice game: Initial HTML should reflect chart-first view.');
+            setButtonState(true);
+        } else {
+            console.log('Non-novice game: Initial HTML should reflect table-first view.');
+            setButtonState(false); 
         }
 
         if (chartData && chartData.years && chartData.years.length > 0) {
-            var options = {
+            console.log('Chart data is valid. Proceeding with chart setup.');
+
+            // Helper function to calculate Y-axis max with padding
+            function getAxisMax(dataArray, paddingPercent = 0.1) {
+                if (!dataArray || dataArray.length === 0) return undefined; 
+                const numericArray = dataArray.map(val => Number(val)).filter(val => !isNaN(val));
+                if (numericArray.length === 0) return undefined;
+                const maxVal = Math.max(...numericArray);
+                return maxVal * (1 + paddingPercent);
+            }
+            
+            // Calculate max values for Y-axes - REORGANIZED
+            const customersMaxChart1 = getAxisMax(chartData.customers);
+            const avgPremiumMaxChart1 = getAxisMax(chartData.average_premium);
+            const cancellationsMaxChart1 = getAxisMax(chartData.cancellations);
+
+            const mktgSpendPercentMaxChart2 = getAxisMax(chartData.marketing_spend_percent_industry);
+            const quotesMaxChart2 = getAxisMax(chartData.quotes);
+            const salesMaxChart2 = getAxisMax(chartData.sales);
+            const activityCountsMaxChart2 = getAxisMax([...(chartData.quotes || []), ...(chartData.sales || [])]);
+
+            // Max values for Chart 3 (Ratios)
+            const avgPremiumMaxChart3 = getAxisMax(chartData.average_premium);
+            const cancellationRateMaxChart3 = getAxisMax(chartData.cancellation_rate);
+            const salesRatioMaxChart3 = getAxisMax(chartData.sales_ratio);
+            const percentRatioMaxChart3 = getAxisMax([...(chartData.cancellation_rate || []), ...(chartData.sales_ratio || [])]);
+
+            const commonXAxis = {
+                categories: chartData.years,
+                title: { text: 'Year' }
+            };
+            
+            const commonChartProps = {
+                height: 350,
+                type: 'line',
+                toolbar: { show: true },
+                group: 'mktgSalesCharts' // Synchronization group
+            };
+
+            // --- Chart 1: Activity Metrics (Customers, Average Premium, Cancellations) ---
+            var options1 = {
                 series: [{
-                    name: 'Marketing Spend',
-                    type: 'column',
-                    data: chartData.marketing_spend
+                    name: 'Customers', type: 'line', data: chartData.customers
                 }, {
-                    name: 'Ending Customers',
-                    type: 'line',
-                    data: chartData.customers
+                    name: 'Average Premium', type: 'line', data: chartData.average_premium
+                }, {
+                    name: 'Cancellations', type: 'line', data: chartData.cancellations
                 }],
-                chart: {
-                    height: 350,
-                    type: 'line', // Even with a column series, keep 'line' for mixed chart behavior
-                    toolbar: {
+                chart: commonChartProps,
+                colors: ['#00E396', '#FF0000', '#5400E0'], // Green (Cust), Red (Avg Prem), Purple (Canx)
+                stroke: { width: [3, 3, 2], curve: 'smooth' },
+                title: { text: 'Customer & Financial Overview' },
+                xaxis: commonXAxis,
+                yaxis: [
+                    {
+                        seriesName: 'Customers',
+                        title: { text: 'Customers' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? Math.round(value).toLocaleString() : ''; } },
+                        tickAmount: 5,
+                        min: 0,
+                        max: customersMaxChart1
+                    },
+                    {
+                        seriesName: 'Average Premium',
+                        opposite: true,
+                        title: { text: 'Average Premium ($' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? "$" + Math.round(value).toLocaleString() : ''; } },
+                        tickAmount: 5,
+                        max: avgPremiumMaxChart1
+                    },
+                    {
+                        seriesName: 'Cancellations',
+                        opposite: true,
+                        title: { text: 'Cancellations' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? Math.round(value).toLocaleString() : ''; } },
+                        tickAmount: 5,
+                        min: 0,
+                        max: cancellationsMaxChart1,
                         show: true
                     }
-                },
-                stroke: {
-                    width: [0, 4] // Bar (column) has no stroke, line has 4px
-                },
-                title: {
-                    text: 'Marketing Spend vs. Customer Growth'
-                },
-                xaxis: {
-                    categories: chartData.years,
-                    title: {
-                        text: 'Year'
-                    }
-                },
-                yaxis: [{
-                    title: {
-                        text: 'Marketing Spend ($)',
-                    },
-                    labels: {
-                        formatter: function (value) {
-                            return "$" + value.toLocaleString();
-                        }
-                    }
-                }, {
-                    opposite: true,
-                    title: {
-                        text: 'Ending Customers'
-                    },
-                    labels: {
-                        formatter: function (value) {
-                            return value.toLocaleString();
-                        }
-                    }
-                }],
+                ],
+                legend: { show: true, position: 'bottom', horizontalAlign: 'center' },
                 tooltip: {
-                    shared: true,
-                    intersect: false,
+                    shared: true, intersect: false,
                     y: {
-                        formatter: function (val, { seriesIndex, dataPointIndex, w }) {
-                            if (seriesIndex === 0) { // Marketing Spend
-                                return "$" + val.toLocaleString();
-                            }
-                            return val.toLocaleString(); // Customers
+                        formatter: function (val, { seriesIndex, w }) {
+                            const seriesName = w.globals.seriesNames[seriesIndex];
+                            if (val === undefined || val === null) return 'N/A';
+                            if (seriesName === 'Customers') return Math.round(val).toLocaleString() + " Customers";
+                            if (seriesName === 'Average Premium') return "$" + Math.round(val).toLocaleString();
+                            if (seriesName === 'Cancellations') return Math.round(val).toLocaleString() + " Cancellations";
+                            return Math.round(val).toLocaleString();
                         }
                     }
                 }
             };
 
-            var chart = new ApexCharts(chartContainer, options);
-            chart.render();
-
-            function toggleElements(showChart) {
-                if (showChart) {
-                    tableContainer.style.display = 'none';
-                    chartContainer.style.display = 'block';
-                    if (toggleButton) toggleButton.textContent = 'Show Table';
-                } else {
-                    tableContainer.style.display = 'block';
-                    chartContainer.style.display = 'none';
-                    if (toggleButton) toggleButton.textContent = 'Show Chart';
+            // --- Chart 2: Marketing & Sales Activity (Mktg Spend %, Quotes, Sales) ---
+            var options2 = {
+                series: [{
+                    name: 'Mktg Spend (% of Industry)', type: 'column', data: chartData.marketing_spend_percent_industry
+                }, {
+                    name: 'Sales', type: 'line', data: chartData.sales
+                }, {
+                    name: 'Quotes', type: 'line', data: chartData.quotes
+                }],
+                chart: commonChartProps,
+                colors: ['#008FFB', '#775DD0', '#FEB019'], // Blue (Mktg %), Purple (Sales), Orange (Quotes)
+                stroke: { width: [0, 3, 3], curve: 'smooth' }, 
+                title: { text: 'Marketing & Sales Activity' },
+                xaxis: commonXAxis,
+                yaxis: [
+                    {
+                        seriesName: ['Sales', 'Quotes'],
+                        title: { text: 'Sales / Quotes' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? Math.round(value).toLocaleString() : ''; } },
+                        tickAmount: 5,
+                        min: 0,
+                        max: activityCountsMaxChart2
+                    },
+                    {
+                        seriesName: 'Mktg Spend (% of Industry)',
+                        opposite: true,
+                        title: { text: 'Mktg Spend (% of Industry)' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? value.toFixed(1) + "%" : ''; } },
+                        tickAmount: 5,
+                        max: mktgSpendPercentMaxChart2
+                    }
+                ],
+                legend: { show: true, position: 'bottom', horizontalAlign: 'center', itemMargin: { horizontal: 5, vertical: 0 } },
+                tooltip: {
+                    shared: true, intersect: false,
+                    y: {
+                        formatter: function (val, { seriesIndex, w }) {
+                            const seriesName = w.globals.seriesNames[seriesIndex];
+                            if (val === undefined || val === null) return 'N/A';
+                            if (seriesName === 'Mktg Spend (% of Industry)') return val.toFixed(1) + "%";
+                            if (seriesName === 'Sales') return Math.round(val).toLocaleString() + " Sales";
+                            if (seriesName === 'Quotes') return Math.round(val).toLocaleString() + " Quotes";
+                            return Math.round(val).toLocaleString();
+                        }
+                    }
                 }
+            };
+
+            // --- Chart 3: Ratio Analysis ---
+            var options3 = {
+                series: [{
+                    name: 'Average Premium', type: 'line', data: chartData.average_premium
+                }, {
+                    name: 'Cancellation Rate (%)', type: 'line', data: chartData.cancellation_rate
+                }, {
+                    name: 'Sales Ratio (%)', type: 'line', data: chartData.sales_ratio
+                }],
+                chart: commonChartProps, // Re-use common properties
+                colors: ['#FF0000', '#00CED1', '#FFD700'], // Red (Avg Prem), Turquoise (Cancel Rate), Gold (Sales Ratio)
+                stroke: { width: [3, 2, 2], curve: 'smooth' },
+                title: { text: 'Key Performance Ratios' },
+                xaxis: commonXAxis,
+                yaxis: [
+                    {
+                        seriesName: 'Average Premium',
+                        title: { text: 'Average Premium ($' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? "$" + Math.round(value).toLocaleString() : ''; } },
+                        tickAmount: 5,
+                        min: 0, // Assuming avg premium should start at 0 for this context, adjust if not
+                        max: avgPremiumMaxChart3
+                    },
+                    {
+                        seriesName: ['Cancellation Rate (%)', 'Sales Ratio (%)'],
+                        opposite: true,
+                        title: { text: 'Rate / Ratio (%)' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? value.toFixed(1) + "%" : ''; } },
+                        tickAmount: 5,
+                        min: 0, // Percentages typically start at 0
+                        max: percentRatioMaxChart3 
+                    }
+                ],
+                legend: { show: true, position: 'bottom', horizontalAlign: 'center', itemMargin: { horizontal: 5, vertical: 0 } },
+                tooltip: {
+                    shared: true, intersect: false,
+                    y: {
+                        formatter: function (val, { seriesIndex, w }) {
+                            const seriesName = w.globals.seriesNames[seriesIndex];
+                            if (val === undefined || val === null) return 'N/A';
+                            if (seriesName === 'Average Premium') return "$" + Math.round(val).toLocaleString();
+                            if (seriesName === 'Cancellation Rate (%)') return val.toFixed(1) + "%";
+                            if (seriesName === 'Sales Ratio (%)') return val.toFixed(1) + "%";
+                            return val.toLocaleString(); // Fallback, though unlikely needed with explicit series
+                        }
+                    }
+                }
+            };
+
+            var chart1 = null;
+            if (activityChartContainer) {
+                chart1 = new ApexCharts(activityChartContainer, options1);
+            }
+            var chart2 = null;
+            if (financialRatioChartContainer) {
+                chart2 = new ApexCharts(financialRatioChartContainer, options2);
+            }
+            var chart3 = null; // New chart object
+            if (ratiosChartContainer) {
+                chart3 = new ApexCharts(ratiosChartContainer, options3);
             }
 
-            if (isNoviceGame) {
-                toggleElements(true); // Show chart by default for novice
+            function setViewVisibility(showCharts) {
+                if (showCharts) {
+                    if (tableContainer) tableContainer.style.display = 'none';
+                    if (activityChartContainer) activityChartContainer.style.display = 'block';
+                    if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'block';
+                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'block'; // Show new chart
+                } else {
+                    if (tableContainer) tableContainer.style.display = 'block';
+                    if (activityChartContainer) activityChartContainer.style.display = 'none';
+                    if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
+                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'none'; // Hide new chart
+                }
+                setButtonState(showCharts);
+            }
+
+            if (chart1 && chart2 && chart3) { // Check for chart3 as well
+                Promise.all([chart1.render(), chart2.render(), chart3.render()]).then(() => { // Render chart3
+                    console.log('All three charts rendered successfully.');
+                    try {
+                        chart1.hideSeries('Cancellations');
+                        chart2.hideSeries('Sales');
+                        // chart3.hideSeries('SeriesNameToHideByDefault'); // If any series in chart3 needs to be hidden by default
+                        console.log('Cancellations (Chart 1) and Sales (Chart 2) series hidden by default.');
+                    } catch (e) {
+                        console.error('Error hiding series by default:', e);
+                    }
+                }).catch(err => {
+                    console.error('One or more charts failed to render:', err);
+                    if (toggleButton) toggleButton.style.display = 'none';
+                    if (activityChartContainer) activityChartContainer.style.display = 'none';
+                    if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
+                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'none'; // Hide new chart on error
+                });
             } else {
-                toggleElements(false); // Show table by default for others
+                if (toggleButton) toggleButton.style.display = 'none';
+                console.error('One or more chart objects not initialized, cannot render.');
+                // Ensure all chart containers are hidden if any object fails to initialize
+                if(activityChartContainer) activityChartContainer.style.display = 'none';
+                if(financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
+                if(ratiosChartContainer) ratiosChartContainer.style.display = 'none';
             }
 
             if (toggleButton) {
                 toggleButton.addEventListener('click', function() {
-                    const isChartVisible = chartContainer.style.display === 'block';
-                    toggleElements(!isChartVisible);
+                    const areChartsCurrentlyVisible = activityChartContainer && activityChartContainer.style.display === 'block';
+                    setViewVisibility(!areChartsCurrentlyVisible);
                 });
-            } else {
-                 // If there is chart data but no button somehow, default to novice setting or table
-                 if (isNoviceGame) {
-                    toggleElements(true);
-                 } else {
-                    toggleElements(false);
-                 }
             }
 
         } else {
-            // If no chart data, ensure button doesn't try to toggle and is perhaps hidden or disabled
+            console.log('Chart data is invalid or has no years. Hiding button and charts.');
             if (toggleButton) toggleButton.style.display = 'none';
-            if (chartContainer) chartContainer.style.display = 'none'; // Also hide chart container if no data
+            if (activityChartContainer) activityChartContainer.style.display = 'none';
+            if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
+            if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
         }
     });
 </script>

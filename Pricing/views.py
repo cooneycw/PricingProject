@@ -537,6 +537,13 @@ def mktgsales_report(request, game_id):
         pass # Keep is_novice_game as False if prefs not found
 
     chart_data = None
+    # Determine initial styles based on game difficulty
+    if is_novice_game:
+        initial_chart_style = "display: block;"
+        initial_table_style = "display: none;"
+    else:
+        initial_chart_style = "display: none;"
+        initial_table_style = "display: block;"
 
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
@@ -554,14 +561,19 @@ def mktgsales_report(request, game_id):
                 # Filter out only the rows belonging to the latest four years
             all_data_years = df['year'].unique()  # Get all unique years
             all_data_years = sorted(all_data_years, reverse=True)  # Sort and pick the latest four years
-            selected_years = sorted([yr for yr in all_data_years if yr <= selected_year], reverse=True)[:4]
+            
+            # For the HTML table (latest 4 years up to selected_year)
+            selected_years_table = sorted([yr for yr in all_data_years if yr <= selected_year], reverse=True)[:4]
+            # For the chart (latest 20 years up to selected_year)
+            chart_selected_years = sorted([yr for yr in all_data_years if yr <= selected_year], reverse=True)[:20]
+
             df = df.sort_values('year', ascending=False)
 
-            # Creating a copy of the filtered DataFrame
-            df_latest = df[df['year'].isin(selected_years)].copy()
+            # Creating a copy of the filtered DataFrame for the TABLE
+            df_latest_table = df[df['year'].isin(selected_years_table)].copy()
 
-            # Transposing the DataFrame to get years as columns and metrics as rows
-            transposed_df = df_latest.set_index('year').T  # Set 'year' as index before transposing
+            # Transposing the DataFrame to get years as columns and metrics as rows (for TABLE)
+            transposed_df = df_latest_table.set_index('year').T  # Set 'year' as index before transposing
             percentage_data = {}
             close_ratio_data = {}
             retention_ratio_data = {}
@@ -704,14 +716,58 @@ def mktgsales_report(request, game_id):
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
 
-            # Prepare data for the chart
-            chart_df = df_latest[df_latest['year'].isin(selected_years)].copy()
-            chart_df = chart_df.sort_values('year', ascending=True) # Oldest to newest for chart
-            chart_data = {
-                'years': chart_df['year'].tolist(),
-                'customers': chart_df['end_in_force'].tolist(),
-                'marketing_spend': chart_df['mktg_expense'].tolist(),
-            }
+            # Prepare data for the CHART (up to 20 years)
+            # Use the original df and filter by chart_selected_years
+            chart_df_source = pd.DataFrame(financial_data_list) # Re-create or use a broader scope df if needed
+            chart_df = chart_df_source[chart_df_source['year'].isin(chart_selected_years)].copy()
+            chart_df = chart_df.sort_values('year', ascending=False) # CHANGED: Newest to oldest for chart
+            
+            if not chart_df.empty:
+                # Calculate Marketing Spend as % of Industry
+                # Ensure mktg_expense_ind is numeric and handle division by zero
+                mktg_spend_percent_industry = []
+                for idx, row in chart_df.iterrows():
+                    mktg_exp = pd.to_numeric(row['mktg_expense'], errors='coerce')
+                    mktg_exp_ind = pd.to_numeric(row['mktg_expense_ind'], errors='coerce')
+                    if pd.notna(mktg_exp) and pd.notna(mktg_exp_ind) and mktg_exp_ind != 0:
+                        mktg_spend_percent_industry.append(round((mktg_exp / mktg_exp_ind) * 100, 2))
+                    else:
+                        mktg_spend_percent_industry.append(0) # Default to 0 if data is missing or division by zero
+
+                # Calculate Cancellation Rate and Close Ratio
+                cancellation_rate_list = []
+                close_ratio_list = [] # Will become sales_ratio_list
+                for idx, row in chart_df.iterrows():
+                    customers_val = pd.to_numeric(row['end_in_force'], errors='coerce')
+                    cancellations_val = pd.to_numeric(row['canx'], errors='coerce')
+                    sales_val = pd.to_numeric(row['sales'], errors='coerce')
+                    quotes_val = pd.to_numeric(row['quotes'], errors='coerce')
+
+                    if pd.notna(customers_val) and pd.notna(cancellations_val) and customers_val != 0:
+                        cancellation_rate_list.append(round((cancellations_val / customers_val) * 100, 2))
+                    else:
+                        cancellation_rate_list.append(0)
+
+                    if pd.notna(sales_val) and pd.notna(quotes_val) and quotes_val != 0:
+                        close_ratio_list.append(round((sales_val / quotes_val) * 100, 2)) # Calculation remains the same
+                    else:
+                        close_ratio_list.append(0)
+
+                chart_data = {
+                    'years': chart_df['year'].tolist(),
+                    'customers': [int(c) for c in chart_df['end_in_force'].tolist()],
+                    'marketing_spend_percent_industry': mktg_spend_percent_industry,
+                    'average_premium': [float(ap) for ap in chart_df['avg_prem'].tolist()],
+                    'quotes': [int(q) for q in chart_df['quotes'].tolist()],
+                    'sales': [int(s) for s in chart_df['sales'].tolist()],
+                    'cancellations': [int(c) for c in chart_df['canx'].tolist()],
+                    'cancellation_rate': cancellation_rate_list,
+                    'sales_ratio': close_ratio_list # Changed key name
+                }
+            else:
+                chart_data = None # Explicitly set to None if no chart data
+
+            # print(f"DEBUG chart_data: {chart_data}")
 
         else:
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
@@ -728,6 +784,8 @@ def mktgsales_report(request, game_id):
         'selected_year': int(selected_year) if selected_year else None,  # Convert selected_year to int if it's not None
         'is_novice_game': is_novice_game,
         'chart_data': chart_data,
+        'initial_chart_style': initial_chart_style,
+        'initial_table_style': initial_table_style,
     }
     return render(request, template_name, context)
 

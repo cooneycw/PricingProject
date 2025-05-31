@@ -7,9 +7,9 @@
             <div class="container">
                 <div class="block-heading" style="display: flex; align-items: center; justify-content: space-between;">
                     <h4 style="margin-right: 20px;font-weight: bolder; color: #0a53be">Marketing / Sales Report</h4>
-                    <form method="POST">
+                    <form method="POST" style="margin-left: auto; margin-right: 10px;">
                         {% csrf_token %}
-                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard"></input>
+                        <input class="btn btn-outline-dark btn-lg action-button" type="Submit" name="Back to Dashboard" value="Back to Dashboard">
                     </form>
                 </div>
                 {% if not has_financial_data %}
@@ -18,30 +18,35 @@
                     </div>
                 {% endif %}
                 {% if has_financial_data %}
-                        <div style="padding-left: 20px;  margin-bottom: 20px;"> <!-- Wrapper with padding for whitespace -->
-                            <form method="GET" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
-                                <div style="margin-right: 15px; width: 300px;"> <!-- Constrained width for the question text -->
-                                    <label for="year">Latest Year for Display:</label>
-                                </div>
-                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
-                                    <select id="year" name="year">
-                                        {% for year in unique_years %}
-                                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <input type="submit" value="Select">
-                            </form>
+                        <div style="padding-left: 20px;  margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <form method="GET" action="" style="display: flex; align-items: center;">
+                                    <div style="margin-right: 15px; width: auto;">
+                                        <label for="year" style="margin-right: 5px;">Latest Year for Display:</label>
+                                    </div>
+                                    <div style="margin-right: 15px; ">
+                                        <select id="year" name="year">
+                                            {% for year in unique_years %}
+                                                <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <input type="submit" value="Select" class="btn btn-primary btn-sm">
+                                </form>
+                                <button id="toggleViewBtn" class="btn btn-info btn-sm">Toggle View</button>
+                            </div>
                             <hr>
                             <div class="mktgsales-data-table">
                                 {{ financial_data_table|safe }}
                             </div>
+                            <div id="mktgSalesChart" style="display: none;"></div>
                         </div>
 
                 {% endif %}
             </div>
         </section>
     </main>
+ <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
  <script>
     document.addEventListener('DOMContentLoaded', function() {
         // Select all table rows within the financial-data-table
@@ -64,6 +69,135 @@
                 cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
             });
         });
+
+        // Chart and Toggle Logic
+        const toggleButton = document.getElementById('toggleViewBtn');
+        const tableContainer = document.querySelector('.mktgsales-data-table');
+        const chartContainer = document.getElementById('mktgSalesChart');
+        
+        // Safely parse JSON data passed from Django template
+        let isNoviceGame = false;
+        try {
+            isNoviceGame = JSON.parse("{{ is_novice_game|yesno:'true,false,null' }}");
+        } catch (e) {
+            console.error('Error parsing is_novice_game:', e);
+        }
+
+        let chartData = null;
+        try {
+            chartData = JSON.parse("{{ chart_data|escapejs }}");
+        } catch (e) {
+            console.error('Error parsing chart_data:', e);
+            // If chart_data is problematic, ensure chart-related elements are hidden/disabled
+            if (toggleButton) toggleButton.style.display = 'none';
+            if (chartContainer) chartContainer.style.display = 'none';
+            return; // Exit if chart data is unusable
+        }
+
+        if (chartData && chartData.years && chartData.years.length > 0) {
+            var options = {
+                series: [{
+                    name: 'Marketing Spend',
+                    type: 'column',
+                    data: chartData.marketing_spend
+                }, {
+                    name: 'Ending Customers',
+                    type: 'line',
+                    data: chartData.customers
+                }],
+                chart: {
+                    height: 350,
+                    type: 'line', // Even with a column series, keep 'line' for mixed chart behavior
+                    toolbar: {
+                        show: true
+                    }
+                },
+                stroke: {
+                    width: [0, 4] // Bar (column) has no stroke, line has 4px
+                },
+                title: {
+                    text: 'Marketing Spend vs. Customer Growth'
+                },
+                xaxis: {
+                    categories: chartData.years,
+                    title: {
+                        text: 'Year'
+                    }
+                },
+                yaxis: [{
+                    title: {
+                        text: 'Marketing Spend ($)',
+                    },
+                    labels: {
+                        formatter: function (value) {
+                            return "$" + value.toLocaleString();
+                        }
+                    }
+                }, {
+                    opposite: true,
+                    title: {
+                        text: 'Ending Customers'
+                    },
+                    labels: {
+                        formatter: function (value) {
+                            return value.toLocaleString();
+                        }
+                    }
+                }],
+                tooltip: {
+                    shared: true,
+                    intersect: false,
+                    y: {
+                        formatter: function (val, { seriesIndex, dataPointIndex, w }) {
+                            if (seriesIndex === 0) { // Marketing Spend
+                                return "$" + val.toLocaleString();
+                            }
+                            return val.toLocaleString(); // Customers
+                        }
+                    }
+                }
+            };
+
+            var chart = new ApexCharts(chartContainer, options);
+            chart.render();
+
+            function toggleElements(showChart) {
+                if (showChart) {
+                    tableContainer.style.display = 'none';
+                    chartContainer.style.display = 'block';
+                    if (toggleButton) toggleButton.textContent = 'Show Table';
+                } else {
+                    tableContainer.style.display = 'block';
+                    chartContainer.style.display = 'none';
+                    if (toggleButton) toggleButton.textContent = 'Show Chart';
+                }
+            }
+
+            if (isNoviceGame) {
+                toggleElements(true); // Show chart by default for novice
+            } else {
+                toggleElements(false); // Show table by default for others
+            }
+
+            if (toggleButton) {
+                toggleButton.addEventListener('click', function() {
+                    const isChartVisible = chartContainer.style.display === 'block';
+                    toggleElements(!isChartVisible);
+                });
+            } else {
+                 // If there is chart data but no button somehow, default to novice setting or table
+                 if (isNoviceGame) {
+                    toggleElements(true);
+                 } else {
+                    toggleElements(false);
+                 }
+            }
+
+        } else {
+            // If no chart data, ensure button doesn't try to toggle and is perhaps hidden or disabled
+            if (toggleButton) toggleButton.style.display = 'none';
+            if (chartContainer) chartContainer.style.display = 'none'; // Also hide chart container if no data
+        }
     });
 </script>
 

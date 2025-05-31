@@ -528,6 +528,16 @@ def mktgsales_report(request, game_id):
     selected_year = request.GET.get('year')  # Get the selected year from the query parameters
     selected_year = int(selected_year) if selected_year else None
 
+    is_novice_game = False  # Default to not Novice
+    try:
+        game_prefs = GamePrefs.objects.get(user=game.initiator)
+        if game_prefs.game_difficulty == 'Novice':
+            is_novice_game = True
+    except GamePrefs.DoesNotExist:
+        pass # Keep is_novice_game as False if prefs not found
+
+    chart_data = None
+
     if unique_years:  # Proceed if there are any financial years available
         # Querying the database
         financial_data_list = list(
@@ -694,6 +704,15 @@ def mktgsales_report(request, game_id):
             financial_data_table = transposed_df.to_html(classes='my-financial-table', border=0, justify='initial',
                                                          index=True)
 
+            # Prepare data for the chart
+            chart_df = df_latest[df_latest['year'].isin(selected_years)].copy()
+            chart_df = chart_df.sort_values('year', ascending=True) # Oldest to newest for chart
+            chart_data = {
+                'years': chart_df['year'].tolist(),
+                'customers': chart_df['end_in_force'].tolist(),
+                'marketing_spend': chart_df['mktg_expense'].tolist(),
+            }
+
         else:
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:
@@ -707,6 +726,8 @@ def mktgsales_report(request, game_id):
         'unique_years': unique_years,
         'latest_year': latest_year,
         'selected_year': int(selected_year) if selected_year else None,  # Convert selected_year to int if it's not None
+        'is_novice_game': is_novice_game,
+        'chart_data': chart_data,
     }
     return render(request, template_name, context)
 
@@ -1903,8 +1924,8 @@ def decision_input(request, game_id):
                     return redirect('Pricing-game_dashboard', game_id=game_id)
             
             # Generate dropdown options from server-provided ranges
-            profit_margins = [f"{x/10:.1f}" for x in range(profit_min, profit_max + 1, 2)]  # 0.2% steps
-            mktg_expenses = [f"{x/10:.1f}" for x in range(mktg_min, mktg_max + 1, 2)]     # 0.2% steps
+            profit_margins = [f"{x/10:.1f}" for x in range(profit_min, profit_max + 1, 5)]  # 0.5% steps
+            mktg_expenses = [f"{x/10:.1f}" for x in range(mktg_min, mktg_max + 1, 5)]     # 0.5% steps
 
             if not is_novice_game:
                 trend_loss_margins = [f"{x/10:.1f}" for x in range(trend_loss_min, trend_loss_max + 1, 2)]  # 0.2% steps
@@ -2134,37 +2155,41 @@ def decision_input(request, game_id):
                                                           border=0, justify='initial',
                                                           index=True, escape=False)
 
+            # All data is ready - create context and render
+            context = {
+                'title': ' - Decision Input',
+                'game': game,
+                'financial_data_table': financial_data_table,
+                'has_financial_data': indication_obj.exists(),
+                'unique_years': unique_years,
+                'selected_year': selected_year,
+                'mct_label': mct_label,
+                'mct_ratio': f'{round(100 * mct_ratio if mct_ratio is not None else 0, 1)}%',
+                'mct_pass': mct_pass,
+                'profit_margins': profit_margins,
+                'sel_profit_margin': f'{sel_profit_margin/10:.1f}',
+                'mktg_expenses': mktg_expenses,
+                'sel_mktg_expense': f'{sel_mktg_expense/10:.1f}',
+                'trend_loss_margins': trend_loss_margins,
+                'sel_trend_loss_margin': f'{sel_trend_loss_margin/10:.1f}' if not is_novice_game else None,
+                'froze_lock': froze_lock,
+                'osfi_alert': osfi_alert,
+                'osfi_intervention': osfi_intervention,  # New flag to distinguish OSFI intervention from historical locks
+                'decisions_locked': decisions_locked,
+                'is_novice_game': is_novice_game,
+                'current_prem': f'${current_prem if current_prem is not None else 0:,.2f}',
+                'indicated_prem': f'${indicated_prem if indicated_prem is not None else 0:,.2f}',
+                'rate_chg': f'<span class="violet-text">{round(100 * rate_chg if rate_chg is not None else 0,1):,.1f}% </span>',
+            }
+            return render(request, template_name, context)
         else:
-            financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
+            # Financial data not ready
+            messages.warning(request, "Financial data not yet available. Please wait for data processing to complete.")
+            return redirect('Pricing-game_dashboard', game_id=game_id)
     else:
-        financial_data_table = '<p>No financial data available.</p>'
-
-    context = {
-        'title': ' - Decision Input',
-        'game': game,
-        'financial_data_table': financial_data_table,
-        'has_financial_data': indication_obj.exists(),
-        'unique_years': unique_years,
-        'selected_year': selected_year,
-        'mct_label': mct_label,
-        'mct_ratio': f'{round(100 * mct_ratio if mct_ratio is not None else 0, 1)}%',
-        'mct_pass': mct_pass,
-        'profit_margins': profit_margins,
-        'sel_profit_margin': f'{sel_profit_margin/10:.1f}',
-        'mktg_expenses': mktg_expenses,
-        'sel_mktg_expense': f'{sel_mktg_expense/10:.1f}',
-        'trend_loss_margins': trend_loss_margins,
-        'sel_trend_loss_margin': f'{sel_trend_loss_margin/10:.1f}' if not is_novice_game else None,
-        'froze_lock': froze_lock,
-        'osfi_alert': osfi_alert,
-        'osfi_intervention': osfi_intervention,  # New flag to distinguish OSFI intervention from historical locks
-        'decisions_locked': decisions_locked,
-        'is_novice_game': is_novice_game,
-        'current_prem': f'${current_prem if current_prem is not None else 0:,.2f}',
-        'indicated_prem': f'${indicated_prem if indicated_prem is not None else 0:,.2f}',
-        'rate_chg': f'<span class="violet-text">{round(100 * rate_chg if rate_chg is not None else 0,1):,.1f}% </span>',
-    }
-    return render(request, template_name, context)
+        # Indication data not ready
+        messages.warning(request, "Indication data processing not yet complete. Please await notification in the Message Centre.")
+        return redirect('Pricing-game_dashboard', game_id=game_id)
 
 
 @login_required

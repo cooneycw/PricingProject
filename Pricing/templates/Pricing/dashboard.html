@@ -35,7 +35,7 @@
                                         </div>
                                         <div class="col-md-3 mb-3">
                                             {% if is_novice_game %}
-                                                <a href="#" class="report-icon" title="Claim Development Report (Disabled for Novice)" style="opacity: 0.75;"><img src="{% static 'Pricing/004_triangle.png'  %}" alt="Claim Development Report" width="80"></a>
+                                                <a href="#" class="report-icon" title="Claim Development Report (Disabled for Novice)" style="opacity: 0.5;"><img src="{% static 'Pricing/004_triangle.png'  %}" alt="Claim Development Report" width="80"></a>
                                             {% else %}
                                                 <a href="{% url 'Pricing-claim_devl_report' game.game_id %}" class="report-icon" title="Claim Development Report"><img src="{% static 'Pricing/004_triangle.png'  %}" alt="Claim Development Report" width="80"></a>
                                             {% endif %}
@@ -46,7 +46,7 @@
                                             <div class="annotation" style="font-weight: bold">Trend</div>
                                         </div>
                                         <div class="col-md-3 mb-3">
-                                            <a href="#" class="report-icon" title="Advanced Analytics (not yet implemented)"><img src="{% static 'Pricing/006_artificial_intelligence.png'  %}" alt="Advanced Analytics" width="80"></a>
+                                            <a href="#" class="report-icon disabled-icon" title="Advanced Analytics (not yet implemented)"><img src="{% static 'Pricing/006_artificial_intelligence.png'  %}" alt="Advanced Analytics" width="80"></a>
                                             <div class="annotation" style="font-weight: bold">A.I.</div>
                                         </div>
                                         <div class="col-md-3 mb-3">
@@ -207,6 +207,16 @@
     align-items: center; /* Center items vertically */
     margin-top: 20px; /* Add some spacing between the message box and icons */
     }
+  .disabled-icon {
+    opacity: 0.4 !important;
+    filter: grayscale(100%) !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+  }
+  .disabled-icon img {
+    opacity: 0.4;
+    filter: grayscale(100%);
+  }
   .game-server {
     color: #3f3f46;
   }

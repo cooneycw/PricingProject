@@ -25,7 +25,7 @@
                                         <label for="year" style="margin-right: 5px;">Latest Year for Display:</label>
                                     </div>
                                     <div style="margin-right: 15px; ">
-                                        <select id="year" name="year">
+                                        <select id="year" name="year" class="form-select form-select-sm">
                                             {% for year in unique_years %}
                                                 <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
                                             {% endfor %}
@@ -33,8 +33,7 @@
                                     </div>
                                     <input type="submit" value="Select" class="btn btn-primary btn-sm">
                                 </form>
-                                <!-- Button default state: Table visible, button prompts to show chart -->
-                                <button id="toggleViewBtn" class="btn btn-outline-warning btn-sm">Show Chart</button>
+                                <button id="toggleViewBtn" class="btn btn-primary btn-sm">Show Chart</button>
                             </div>
                             <hr>
                             <div class="mktgsales-data-table" style="{{ initial_table_style|default:'display: block' }};">
@@ -124,12 +123,12 @@
             if (toggleButton) {
                 if (showChart) {
                     toggleButton.textContent = 'Show Table';
-                    toggleButton.classList.remove('btn-outline-warning');
-                    toggleButton.classList.add('btn-primary');
+                    toggleButton.classList.remove('btn-primary');
+                    toggleButton.classList.add('btn-warning');
                 } else {
                     toggleButton.textContent = 'Show Chart';
-                    toggleButton.classList.remove('btn-primary');
-                    toggleButton.classList.add('btn-outline-warning');
+                    toggleButton.classList.remove('btn-warning');
+                    toggleButton.classList.add('btn-primary');
                 }
             }
         }
@@ -271,6 +270,7 @@
                         title: { text: 'Mktg Spend (% of Industry)' },
                         labels: { formatter: function (value) { return value !== undefined && value !== null ? value.toFixed(1) + "%" : ''; } },
                         tickAmount: 5,
+                        min: 0, // Always start at 0
                         max: mktgSpendPercentMaxChart2
                     }
                 ],

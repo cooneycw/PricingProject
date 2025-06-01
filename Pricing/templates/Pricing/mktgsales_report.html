@@ -478,6 +478,8 @@
                 console.log('DEBUG: Y-axis range in retention data:', 
                     'min=', Math.min(...retentionData.map(p => p.y)),
                     'max=', Math.max(...retentionData.map(p => p.y)));
+                console.log('DEBUG: First 3 retention data points:', JSON.stringify(retentionData.slice(0, 3)));
+                console.log('DEBUG: First 3 close ratio data points:', JSON.stringify(closeRatioData.slice(0, 3)));
                 
                 var options4 = {
                     series: [

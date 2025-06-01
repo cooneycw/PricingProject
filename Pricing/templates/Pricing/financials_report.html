@@ -71,6 +71,7 @@
         try {
             isNoviceGame = JSON.parse("{{ is_novice_game|yesno:'true,false,null' }}");
         } catch (e) {
+            console.error('Error parsing is_novice_game:', e);
             isNoviceGame = false;
         }
 
@@ -82,6 +83,25 @@
             } catch (e) {
                 chartData = null;
             }
+        }
+
+        // Determine current system's latest year
+        let currentSystemLatestYear = null;
+        if (chartData && chartData.years && chartData.years.length > 0) {
+            // Assuming chartData.years contains numeric year values or strings convertible to numbers
+            currentSystemLatestYear = Math.max(...chartData.years.map(y => parseInt(y, 10)).filter(y => !isNaN(y)));
+        }
+        if (isNaN(currentSystemLatestYear) || currentSystemLatestYear === null || currentSystemLatestYear === -Infinity) { // Fallback or if chartData.years was empty/invalid
+            const yearOptions = Array.from(document.querySelectorAll('#year option'))
+                                     .map(opt => parseInt(opt.value, 10))
+                                     .filter(y => !isNaN(y));
+            if (yearOptions.length > 0) {
+                currentSystemLatestYear = Math.max(...yearOptions);
+            }
+        }
+        // Ensure currentSystemLatestYear is null if no valid year was found
+        if (currentSystemLatestYear === -Infinity || isNaN(currentSystemLatestYear)) {
+            currentSystemLatestYear = null;
         }
 
         function setButtonState(showChart) {
@@ -109,10 +129,41 @@
             setButtonState(showChart);
         }
 
-        // Initial state
-        setViewVisibility(isNoviceGame);
+        // Function to update localStorage and return the view state (true for chart, false for table)
+        function getAndManageStoredFinancialsView(currentLatestYearFromSystem, isNoviceUser) {
+            let storedViewPref = localStorage.getItem('financialsView');
+            let storedLatestYear = localStorage.getItem('financialsLatestYear') ? parseInt(localStorage.getItem('financialsLatestYear'), 10) : null;
+            let showChart;
 
-        // Chart rendering
+            if (currentLatestYearFromSystem !== null && (storedLatestYear === null || currentLatestYearFromSystem > storedLatestYear)) {
+                // New data year detected or first time with year logic for this report
+                showChart = true; // Default to chart
+                localStorage.setItem('financialsView', 'chart');
+                localStorage.setItem('financialsLatestYear', currentLatestYearFromSystem.toString());
+            } else if (storedViewPref) {
+                // Use existing preference as no new year forces a change
+                showChart = (storedViewPref === 'chart');
+                // If storedLatestYear was somehow not set but viewPref was, and we have a current year, set it now
+                if (storedLatestYear === null && currentLatestYearFromSystem !== null) {
+                    localStorage.setItem('financialsLatestYear', currentLatestYearFromSystem.toString());
+                }
+            } else {
+                // No stored preference, and no new year forcing a change - use novice status
+                showChart = isNoviceUser;
+                localStorage.setItem('financialsView', showChart ? 'chart' : 'table');
+                if (currentLatestYearFromSystem !== null) {
+                    localStorage.setItem('financialsLatestYear', currentLatestYearFromSystem.toString());
+                }
+            }
+            return showChart;
+        }
+
+        let showChartsInitialState = getAndManageStoredFinancialsView(currentSystemLatestYear, isNoviceGame);
+
+        if (tableContainer && chartContainer && toggleButton) {
+            setViewVisibility(showChartsInitialState);
+        }
+
         if (chartData && chartData.years && chartData.years.length > 0) {
             var options = {
                 series: [
@@ -169,7 +220,13 @@
         if (toggleButton) {
             toggleButton.addEventListener('click', function() {
                 const isChartVisible = chartContainer && chartContainer.style.display === 'block';
-                setViewVisibility(!isChartVisible);
+                const newViewIsCharts = !isChartVisible;
+                setViewVisibility(newViewIsCharts);
+
+                localStorage.setItem('financialsView', newViewIsCharts ? 'chart' : 'table');
+                if (currentSystemLatestYear !== null) {
+                    localStorage.setItem('financialsLatestYear', currentSystemLatestYear.toString());
+                }
             });
         }
     });

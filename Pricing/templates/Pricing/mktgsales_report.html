@@ -118,6 +118,8 @@
             isNoviceGame = JSON.parse("{{ is_novice_game|yesno:'true,false,null' }}");
         } catch (e) {
             console.error('Error parsing is_novice_game:', e);
+            // Default to false if parsing fails
+            isNoviceGame = false;
         }
 
         let chartData;
@@ -139,6 +141,23 @@
             }
         } else if ("{{chart_data}}" === "None" || "{{chart_data}}" === "") {
              console.log('chart_data was None or empty in Django context, chartData will remain null.');
+        }
+
+        // Determine current system's latest year
+        let currentSystemLatestYear = null;
+        if (chartData && chartData.years && chartData.years.length > 0) {
+            currentSystemLatestYear = Math.max(...chartData.years.map(y => parseInt(y, 10)).filter(y => !isNaN(y)));
+        }
+        if (isNaN(currentSystemLatestYear) || currentSystemLatestYear === null || currentSystemLatestYear === -Infinity) { // Fallback or if chartData.years was empty/invalid
+            const yearOptions = Array.from(document.querySelectorAll('#year option'))
+                                     .map(opt => parseInt(opt.value, 10))
+                                     .filter(y => !isNaN(y));
+            if (yearOptions.length > 0) {
+                currentSystemLatestYear = Math.max(...yearOptions);
+            }
+        }
+        if (currentSystemLatestYear === -Infinity || isNaN(currentSystemLatestYear)) {
+            currentSystemLatestYear = null;
         }
 
         // Moved function definitions to a higher scope
@@ -175,22 +194,40 @@
             setButtonState(showCharts);
         }
 
-        // Logic for initial view based on localStorage or game type default
-        const preferredView = localStorage.getItem('mktgSalesView');
-        let showChartsInitialState = isNoviceGame; // Default to game type if no preference
+        // Function to update localStorage and return the view state (true for chart, false for table)
+        function getAndManageStoredMktgSalesView(currentLatestYearFromSystem, isNoviceUser) {
+            let storedViewPref = localStorage.getItem('mktgSalesView');
+            let storedLatestYear = localStorage.getItem('mktgSalesLatestYear') ? parseInt(localStorage.getItem('mktgSalesLatestYear'), 10) : null;
+            let showCharts;
 
-        if (preferredView === 'chart') {
-            showChartsInitialState = true;
-        } else if (preferredView === 'table') {
-            showChartsInitialState = false;
+            if (currentLatestYearFromSystem !== null && (storedLatestYear === null || currentLatestYearFromSystem > storedLatestYear)) {
+                // New data year detected or first time with year logic
+                showCharts = true; // Default to chart
+                localStorage.setItem('mktgSalesView', 'chart');
+                localStorage.setItem('mktgSalesLatestYear', currentLatestYearFromSystem.toString());
+            } else if (storedViewPref) {
+                // Use existing preference
+                showCharts = (storedViewPref === 'chart');
+                if (storedLatestYear === null && currentLatestYearFromSystem !== null) {
+                     localStorage.setItem('mktgSalesLatestYear', currentLatestYearFromSystem.toString());
+                }
+            } else {
+                // No stored preference, use novice status
+                showCharts = isNoviceUser;
+                localStorage.setItem('mktgSalesView', showCharts ? 'chart' : 'table');
+                if (currentLatestYearFromSystem !== null) {
+                    localStorage.setItem('mktgSalesLatestYear', currentLatestYearFromSystem.toString());
+                }
+            }
+            return showCharts;
         }
-        // If preferredView is null, showChartsInitialState remains based on isNoviceGame
+
+        let showChartsInitialState = getAndManageStoredMktgSalesView(currentSystemLatestYear, isNoviceGame);
 
         // Apply the initial visibility state, ensuring elements exist
         if (tableContainer && activityChartContainer && financialRatioChartContainer && ratiosChartContainer && scatterChartContainer && colorGuideContainer && toggleButton) {
             setViewVisibility(showChartsInitialState);
         }
-
 
         if (toggleButton) {
             toggleButton.addEventListener('click', function() {
@@ -199,14 +236,12 @@
 
                 setViewVisibility(newViewIsCharts); // Update visibility and button text
 
-                if (newViewIsCharts) {
-                    localStorage.setItem('mktgSalesView', 'chart');
-                } else {
-                    localStorage.setItem('mktgSalesView', 'table');
+                localStorage.setItem('mktgSalesView', newViewIsCharts ? 'chart' : 'table');
+                if (currentSystemLatestYear !== null) {
+                    localStorage.setItem('mktgSalesLatestYear', currentSystemLatestYear.toString());
                 }
             });
         }
-
 
         // Placeholder for OSFI failure data - this should be populated from your Django view
         // Example structure: {'2023': ['CompanyA', 'CompanyB'], '2022': ['CompanyC']}

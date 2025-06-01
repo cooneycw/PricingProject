@@ -804,6 +804,8 @@ def mktgsales_report(request, game_id):
                     except:
                         product_reforms[ct.year] = None
                 
+                print(f"DEBUG product_reforms: {product_reforms}")
+                
                 # Calculate rate increases and align with next year's ratios
                 years_sorted = sorted(chart_df['year'].unique())
                 print(f"DEBUG years_sorted: {years_sorted}, length: {len(years_sorted)}")

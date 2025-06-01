@@ -782,6 +782,7 @@ def mktgsales_report(request, game_id):
                 
                 # Get product reform data
                 product_reforms = {}
+                print(f"DEBUG: ClaimTrends data count: {claim_trends_data.count()}")
                 for ct in claim_trends_data:
                     try:
                         trends = ct.claim_trends
@@ -805,6 +806,8 @@ def mktgsales_report(request, game_id):
                 
                 # Calculate rate increases and align with next year's ratios
                 years_sorted = sorted(chart_df['year'].unique())
+                print(f"DEBUG years_sorted: {years_sorted}, length: {len(years_sorted)}")
+                
                 for i in range(len(years_sorted) - 1):
                     curr_year = years_sorted[i]
                     next_year = years_sorted[i + 1]
@@ -815,6 +818,7 @@ def mktgsales_report(request, game_id):
                     
                     # Calculate rate increase (percentage change in average premium)
                     if i > 0:
+                        print(f"DEBUG: Processing i={i}, curr_year={curr_year}, prev_year={years_sorted[i-1]}")
                         prev_year = years_sorted[i - 1]
                         prev_data = chart_df[chart_df['year'] == prev_year].iloc[0]
                         prev_premium = float(prev_data['avg_prem'])

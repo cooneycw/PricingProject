@@ -4,6 +4,8 @@ import pytz
 import numpy as np
 import pandas as pd
 import decimal
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import MinMaxScaler
 from .utils import reverse_pv_index, calculate_growth_rate, calculate_avg_profit, calculate_future_value, perform_logistic_regression, perform_logistic_regression_indication
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse, Http404
@@ -12,7 +14,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
-from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum, Exists
+from django.db.models import Q, Count, Case, When, Value, CharField, Max, Sum, Exists, Min, F, OuterRef, Subquery
 from datetime import timedelta
 from PricingProject.settings import CONFIG_FRESH_PREFS
 from .forms import GamePrefsForm
@@ -782,7 +784,6 @@ def mktgsales_report(request, game_id):
                 
                 # Get product reform data
                 product_reforms = {}
-                print(f"DEBUG: ClaimTrends data count: {claim_trends_data.count()}")
                 for ct in claim_trends_data:
                     try:
                         trends = ct.claim_trends
@@ -803,12 +804,8 @@ def mktgsales_report(request, game_id):
                     except:
                         product_reforms[ct.year] = None
                 
-                print(f"DEBUG product_reforms: {product_reforms}")
-                
                 # Calculate rate increases and align with next year's ratios
                 years_sorted = sorted(chart_df['year'].unique())
-                print(f"DEBUG years_sorted: {years_sorted}, length: {len(years_sorted)}")
-                print(f"DEBUG: Expected scatter points: {max(0, len(years_sorted) - 2)} (need prev year for rate, next year for ratios)")
                 
                 for i in range(len(years_sorted) - 1):
                     curr_year = years_sorted[i]
@@ -820,7 +817,6 @@ def mktgsales_report(request, game_id):
                     
                     # Calculate rate increase (percentage change in average premium)
                     if i > 0:
-                        print(f"DEBUG: Processing i={i}, curr_year={curr_year}, prev_year={years_sorted[i-1]}")
                         prev_year = years_sorted[i - 1]
                         prev_data = chart_df[chart_df['year'] == prev_year].iloc[0]
                         prev_premium = float(prev_data['avg_prem'])
@@ -863,15 +859,72 @@ def mktgsales_report(request, game_id):
                             'osfi_interventions': int(osfi_count),  # Convert to int in case it's numpy type
                             'product_reforms': reform_type  # Pass reform type as string
                         })
-                        print(f"DEBUG: Added scatter point - year: {curr_year}, rate_increase: {rate_increase:.2f}, "
-                              f"retention: {retention_ratio:.2f}, close: {close_ratio:.2f}, "
-                              f"osfi: {osfi_count}, reforms: {reform_type}")
                     else:
-                        print(f"DEBUG: Skipping i={i}, curr_year={curr_year} (need previous year for rate calculation)")
+                        pass  # Skipping first year (need previous year for rate calculation)
+                
+                # Calculate logistic regression curves if we have scatter data
+                close_ratio_curve = []
+                retention_ratio_curve = []
+                
+                if len(scatter_data) > 0:
+                    # Extract X (rate increases) and Y values for both ratios
+                    X = np.array([[point['rate_increase']] for point in scatter_data])
+                    y_close = np.array([point['close_ratio'] for point in scatter_data])
+                    y_retention = np.array([point['retention_ratio'] for point in scatter_data])
+                    
+                    # Scale the Y values to 0-1 range for logistic regression
+                    scaler_close = MinMaxScaler()
+                    scaler_retention = MinMaxScaler()
+                    
+                    y_close_scaled = scaler_close.fit_transform(y_close.reshape(-1, 1)).ravel()
+                    y_retention_scaled = scaler_retention.fit_transform(y_retention.reshape(-1, 1)).ravel()
+                    
+                    # Fit logistic regression models
+                    try:
+                        # Close ratio model
+                        lr_close = LogisticRegression(random_state=42, max_iter=1000)
+                        # Convert to binary classification by using median as threshold
+                        y_close_binary = (y_close_scaled > np.median(y_close_scaled)).astype(int)
+                        lr_close.fit(X, y_close_binary)
+                        
+                        # Retention ratio model
+                        lr_retention = LogisticRegression(random_state=42, max_iter=1000)
+                        y_retention_binary = (y_retention_scaled > np.median(y_retention_scaled)).astype(int)
+                        lr_retention.fit(X, y_retention_binary)
+                        
+                        # Generate smooth curve points
+                        x_range = np.linspace(X.min(), X.max(), 100)
+                        X_range = x_range.reshape(-1, 1)
+                        
+                        # Get predicted probabilities and scale back to original range
+                        close_probs = lr_close.predict_proba(X_range)[:, 1]
+                        retention_probs = lr_retention.predict_proba(X_range)[:, 1]
+                        
+                        # Scale back to original percentage range
+                        close_scaled = close_probs.reshape(-1, 1)
+                        retention_scaled = retention_probs.reshape(-1, 1)
+                        
+                        close_curve_values = scaler_close.inverse_transform(close_scaled).ravel()
+                        retention_curve_values = scaler_retention.inverse_transform(retention_scaled).ravel()
+                        
+                        # Create curve data for chart
+                        for i in range(len(x_range)):
+                            close_ratio_curve.append({
+                                'x': round(float(x_range[i]), 2),
+                                'y': round(float(close_curve_values[i]), 2)
+                            })
+                            retention_ratio_curve.append({
+                                'x': round(float(x_range[i]), 2),
+                                'y': round(float(retention_curve_values[i]), 2)
+                            })
+                    except Exception as e:
+                        # If regression fails, just pass empty curves
+                        print(f"Logistic regression failed: {e}")
+                        pass
                 
                 chart_data['scatter_data'] = scatter_data
-                print(f"DEBUG: Total scatter_data points: {len(scatter_data)}")
-                print(f"DEBUG: First 2 scatter points: {scatter_data[:2] if scatter_data else 'None'}")
+                chart_data['close_ratio_curve'] = close_ratio_curve
+                chart_data['retention_ratio_curve'] = retention_ratio_curve
             else:
                 chart_data = None # Explicitly set to None if no chart data
 

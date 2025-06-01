@@ -420,9 +420,6 @@
 
             // --- Chart 4: Rate Impact Scatter Plot ---
             var chart4 = null;
-            console.log('DEBUG: scatterChartContainer exists?', scatterChartContainer ? 'Yes' : 'No');
-            console.log('DEBUG: chartData.scatter_data exists?', chartData && chartData.scatter_data ? 'Yes' : 'No');
-            console.log('DEBUG: scatter_data length:', chartData && chartData.scatter_data ? chartData.scatter_data.length : 0);
             
             if (scatterChartContainer && chartData.scatter_data && chartData.scatter_data.length > 0) {
                 console.log('DEBUG: scatter_data exists with', chartData.scatter_data.length, 'points');
@@ -483,8 +480,10 @@
                 
                 var options4 = {
                     series: [
+                        { name: 'Close Ratio', type: 'scatter', data: closeRatioData },
                         { name: 'Retention Ratio', type: 'scatter', data: retentionData },
-                        { name: 'Close Ratio', type: 'scatter', data: closeRatioData }
+                        { name: 'Close Ratio Trend', type: 'line', data: chartData.close_ratio_curve || [] },
+                        { name: 'Retention Ratio Trend', type: 'line', data: chartData.retention_ratio_curve || [] }
                     ],
                     chart: {
                         height: 350,
@@ -492,7 +491,13 @@
                         toolbar: { show: true },
                         zoom: { enabled: true, type: 'xy' }
                     },
-                    title: { text: 'Rate Increase Impact on Retention & Close Ratios' },
+                    stroke: {
+                        width: [0, 0, 2, 2], // No stroke for scatter, 2px for trend lines
+                        curve: ['straight', 'straight', 'smooth', 'smooth'],
+                        dashArray: [0, 0, 5, 5] // Dashed lines for trends
+                    },
+                    colors: ['#FF4560', '#00E396', '#FF4560', '#00E396'], // Red for close, green for retention
+                    title: { text: 'Rate Increase Impact on Close & Retention Ratios' },
                     xaxis: {
                         title: { text: 'Rate Increase (%)' },
                         min: -10,  // Allow for negative rate increases
@@ -506,11 +511,9 @@
                     },
                     yaxis: {
                         title: { text: 'Ratio (%)' },
-                        min: 0,
-                        max: 100,
                         labels: {
                             formatter: function(val) {
-                                return val !== undefined && val !== null ? val.toFixed(0) + '%' : '';
+                                return val !== undefined && val !== null ? val.toFixed(1) + '%' : '';
                             }
                         }
                     },
@@ -552,20 +555,6 @@
                             
                             return tooltipHtml;
                         }
-                    },
-                    annotations: {
-                        yaxis: [
-                            {
-                                y: 100,
-                                strokeDashArray: 5,
-                                borderColor: '#775DD0',
-                                label: {
-                                    borderColor: '#775DD0',
-                                    style: { color: '#fff', background: '#775DD0' },
-                                    text: '100% Retention'
-                                }
-                            }
-                        ]
                     }
                 };
                 
@@ -586,6 +575,13 @@
                 chart4 = new ApexCharts(scatterChartContainer, options4);
                 console.log('DEBUG: Chart 4 created with options:', options4);
                 console.log('DEBUG: Series data lengths - retention:', options4.series[0].data.length, 'close:', options4.series[1].data.length);
+
+                if (chart4) {
+                    chart4.hideSeries('Retention Ratio'); // Hide Retention Ratio by default
+                    chart4.hideSeries('Close Ratio Trend'); // Hide Close Ratio Trend by default
+                    chart4.hideSeries('Retention Ratio Trend'); // Hide Retention Ratio Trend by default
+                    console.log('Retention Ratio and trend lines hidden by default in scatter plot.');
+                }
             } else {
                 console.log('DEBUG: Scatter chart NOT created. Reasons:');
                 console.log('  - scatterChartContainer:', scatterChartContainer ? 'exists' : 'missing');
@@ -621,6 +617,10 @@
                         chart2.hideSeries('Sales');
                         chart2.hideSeries('Cancellations'); // Hide Cancellations by default in Chart 2
                         // chart3.hideSeries('SeriesNameToHideByDefault'); // If any series in chart3 needs to be hidden by default
+                        if (chart4) {
+                            chart4.hideSeries('Retention Ratio'); // Hide Retention Ratio by default
+                            console.log('Retention Ratio series hidden by default in scatter plot.');
+                        }
                         console.log('Sales and Cancellations (Chart 2) series hidden by default.');
                     } catch (e) {
                         console.error('Error hiding series by default:', e);

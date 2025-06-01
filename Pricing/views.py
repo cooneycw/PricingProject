@@ -1068,9 +1068,18 @@ def financials_report(request, game_id):
             chart_df['capital'] = pd.to_numeric(chart_df['capital'], errors='coerce').fillna(0)
             chart_df['profit'] = pd.to_numeric(chart_df['profit'], errors='coerce').fillna(0)
             chart_df['dividend_paid'] = pd.to_numeric(chart_df['dividend_paid'], errors='coerce').fillna(0)
+            
+            # Calculate year-over-year change in written premium
+            chart_df = chart_df.sort_values('year')  # Ensure proper ordering for diff calculation
+            chart_df['premium_change'] = chart_df['written_premium'].diff().fillna(0)
+            
+            # Sort back to reverse order (most recent first) for display
+            chart_df = chart_df.sort_values('year', ascending=False)
+            
             chart_data = {
                 'years': chart_df['year'].tolist(),
                 'written_premium': chart_df['written_premium'].tolist(),
+                'premium_change': chart_df['premium_change'].tolist(),
                 'capital': chart_df['capital'].tolist(),
                 'profitability': chart_df['profit'].tolist(),
                 'dividends': chart_df['dividend_paid'].tolist(),

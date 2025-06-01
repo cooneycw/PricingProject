@@ -181,8 +181,12 @@
             }
 
             // Calculate max values for Y-axes
-            const writtenPremiumMax = getAxisMax(chartData.written_premium || []);
-            const capitalProfitDividendMax = getAxisMax([...(chartData.capital || []), ...(chartData.profitability || []), ...(chartData.dividends || [])]);
+            const writtenPremiumCapitalMax = getAxisMax([...(chartData.written_premium || []), ...(chartData.capital || [])]);
+            const premiumChangeMax = Math.max(
+                Math.abs(Math.min(...(chartData.premium_change || [0]))),
+                Math.abs(Math.max(...(chartData.premium_change || [0])))
+            ) * 1.1; // Add 10% padding for premium change (can be negative)
+            const profitDividendChangeMax = getAxisMax([...(chartData.profitability || []), ...(chartData.dividends || []), ...(chartData.premium_change || [])]);
 
             // Prepare MCT test failure annotations
             const mctAnnotations = [];
@@ -216,6 +220,7 @@
             var optionsFinancials = {
                 series: [
                     { name: 'Written Premium', type: 'line', data: chartData.written_premium },
+                    { name: 'Change in Written Premium', type: 'column', data: chartData.premium_change },
                     { name: 'Capital', type: 'line', data: chartData.capital },
                     { name: 'Profitability', type: 'column', data: chartData.profitability },
                     { name: 'Dividends', type: 'column', data: chartData.dividends }
@@ -225,8 +230,8 @@
                     type: 'line',
                     toolbar: { show: true }
                 },
-                colors: ['#008FFB', '#00E396', '#FF4560', '#FEB019'],
-                stroke: { width: [3, 3, 0, 0], curve: 'smooth' },
+                colors: ['#008FFB', '#775DD0', '#00E396', '#FF4560', '#FEB019'],
+                stroke: { width: [3, 0, 3, 0, 0], curve: 'smooth' },
                 plotOptions: {
                     bar: {
                         columnWidth: '50%',
@@ -238,21 +243,20 @@
                 grid: commonGrid,
                 yaxis: [
                     {
-                        seriesName: 'Written Premium',
-                        title: { text: 'Written Premium ($)' },
+                        seriesName: ['Written Premium', 'Capital'],
+                        title: { text: 'Written Premium & Capital ($)' },
                         labels: { formatter: function (value) { return value !== undefined && value !== null ? "$" + Math.round(value).toLocaleString() : ''; } },
                         tickAmount: 5,
                         min: 0,
-                        max: writtenPremiumMax
+                        max: writtenPremiumCapitalMax
                     },
                     {
-                        seriesName: ['Capital', 'Profitability', 'Dividends'],
+                        seriesName: ['Change in Written Premium', 'Profitability', 'Dividends'],
                         opposite: true,
-                        title: { text: 'Capital, Profitability & Dividends ($)' },
+                        title: { text: 'Profitability, Dividends & Premium Change ($)' },
                         labels: { formatter: function (value) { return value !== undefined && value !== null ? "$" + Math.round(value).toLocaleString() : ''; } },
                         tickAmount: 5,
-                        min: 0,
-                        max: capitalProfitDividendMax
+                        max: profitDividendChangeMax
                     }
                 ],
                 annotations: {
@@ -264,6 +268,10 @@
                     y: {
                         formatter: function (val, { seriesIndex, w }) {
                             if (val === undefined || val === null) return 'N/A';
+                            const seriesName = w.globals.seriesNames[seriesIndex];
+                            if (seriesName === 'Change in Written Premium') {
+                                return (val >= 0 ? '+' : '') + "$" + Math.round(val).toLocaleString();
+                            }
                             return "$" + Math.round(val).toLocaleString();
                         }
                     }
@@ -275,6 +283,13 @@
                 financialsChart = new ApexCharts(financialsChartContainer, optionsFinancials);
                 financialsChart.render().then(() => {
                     console.log('Financial chart rendered successfully.');
+                    // Hide "Change in Written Premium" by default
+                    try {
+                        financialsChart.hideSeries('Change in Written Premium');
+                        console.log('Change in Written Premium series hidden by default.');
+                    } catch (e) {
+                        console.error('Error hiding Change in Written Premium series:', e);
+                    }
                 }).catch(err => {
                     console.error('Chart failed to render:', err);
                     if (toggleButton) toggleButton.style.display = 'none';

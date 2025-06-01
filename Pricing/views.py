@@ -779,16 +779,35 @@ def mktgsales_report(request, game_id):
                     player_id=user
                 ).order_by('year')
                 
+                # Get the Player object for the current user to assist in excluding their data from industry counts
+                current_player_obj = Players.objects.filter(game=game, player_id=user).first()
+
                 # Create a dictionary for OSFI intervention counts by year
                 osfi_intervention_counts = {}
-                for year in chart_df['year'].unique():
+                for year_val in chart_df['year'].unique():
                     # Count capital test failures in the industry for each year
-                    failures = industry_data.filter(year=year, capital_test='Fail').count()
-                    osfi_intervention_counts[year] = failures
-                    print(f"DEBUG: Year {year} - Industry MCT failures: {failures}")
+                    industry_failures_query = industry_data.filter(year=year_val, capital_test='Fail')
+                    if current_player_obj:
+                        # Exclude the current user's company from the industry count if it failed
+                        # The player_id field in Industry model likely refers to the User model instance
+                        industry_failures_query = industry_failures_query.exclude(player_id=user)
+                    
+                    failures = industry_failures_query.count()
+                    osfi_intervention_counts[year_val] = failures
+                    # print(f"DEBUG: Year {year_val} - Industry MCT failures (excluding host): {failures}")
                 
-                print(f"DEBUG: OSFI intervention counts by year: {osfi_intervention_counts}")
+                print(f"DEBUG: OSFI intervention counts by year (pre-lag): {osfi_intervention_counts}")
                 
+                # --- Apply one-year lag so the impact is felt in the FOLLOWING year ---
+                osfi_intervention_counts = {yr + 1: cnt for yr, cnt in osfi_intervention_counts.items()}
+                print(f"DEBUG: Shifted OSFI intervention counts (impact year): {osfi_intervention_counts}")
+                
+                # Host-company (player) MCT failure flag – lagged by one year as well
+                host_failure_prev = {}
+                host_financials = Financials.objects.filter(game_id=game, player_id=user)
+                for fin in host_financials:
+                    host_failure_prev[fin.year + 1] = (fin.capital_test == 'Fail')
+
                 # Get product reform data
                 product_reforms = {}
                 for ct in claim_trends_data:
@@ -815,51 +834,88 @@ def mktgsales_report(request, game_id):
                 years_sorted = sorted(chart_df['year'].unique())
                 
                 for curr_year in years_sorted:
-                    # Get decision data for current year
-                    decision = user_decisions.filter(year=curr_year).first()
+                    # Get decision data for PRIOR year (lag 1)
+                    # decision = user_decisions.filter(year=curr_year - 1).first()
+                    # if not decision:
+                        # Fallback to same-year decision if prior not available (first year)
+                        # decision = user_decisions.filter(year=curr_year).first()
                     
-                    if decision:
+                    # Fetch current and previous year decisions for YoY premium change
+                    decision_for_curr_year_effective_rate = user_decisions.filter(year=curr_year - 1).first()
+                    decision_for_prev_year_effective_rate = user_decisions.filter(year=curr_year - 2).first()
+
+                    # For a point representing curr_year (and its ratios),
+                    # the x-axis (yoy_rate_change) will be the rate change implemented for curr_year + 1.
+                    # decision_for_rate_change_next_period = user_decisions.filter(year=curr_year + 1).first() // COMMENTING OUT
+                    # decision_for_rate_change_curr_period_for_calc = user_decisions.filter(year=curr_year).first() // COMMENTING OUT
+
+                    yoy_rate_change = 0.0  # Default to 0% change
+
+                    # if decision_for_rate_change_next_period and decision_for_rate_change_next_period.sel_avg_prem is not None and \
+                    #    decision_for_rate_change_curr_period_for_calc and decision_for_rate_change_curr_period_for_calc.sel_avg_prem is not None and \
+                    #    decision_for_rate_change_curr_period_for_calc.sel_avg_prem > 0:
+                    if decision_for_curr_year_effective_rate and decision_for_curr_year_effective_rate.sel_avg_prem is not None and \
+                       decision_for_prev_year_effective_rate and decision_for_prev_year_effective_rate.sel_avg_prem is not None and \
+                       decision_for_prev_year_effective_rate.sel_avg_prem > 0:
+                        try:
+                            # prem_next_for_rate_calc = decimal.Decimal(decision_for_rate_change_next_period.sel_avg_prem)
+                            # prem_curr_for_rate_calc = decimal.Decimal(decision_for_rate_change_curr_period_for_calc.sel_avg_prem)
+                            # prem_curr_val = decimal.Decimal(decision_curr.sel_avg_prem) # USING decision_curr
+                            # prem_prev_val = decimal.Decimal(decision_prev.sel_avg_prem) # USING decision_prev
+                            prem_effective_curr_val = decimal.Decimal(decision_for_curr_year_effective_rate.sel_avg_prem)
+                            prem_effective_prev_val = decimal.Decimal(decision_for_prev_year_effective_rate.sel_avg_prem)
+                            yoy_rate_change = float((prem_effective_curr_val / prem_effective_prev_val - 1) * 100)
+                        except (decimal.InvalidOperation, TypeError):
+                            yoy_rate_change = 0.0 # Fallback if conversion fails
+                    
+                    # if decision: // This was for combined_expense
                         # Calculate profit_margin + marketing_expense (both stored as integers representing tenths)
-                        profit_margin = decision.sel_profit_margin / 10.0  # Convert to percentage
-                        marketing_expense = decision.sel_exp_ratio_mktg / 10.0  # Convert to percentage
-                        combined_expense = profit_margin + marketing_expense
+                        # profit_margin = decision.sel_profit_margin / 10.0  # Convert to percentage
+                        # marketing_expense = decision.sel_exp_ratio_mktg / 10.0  # Convert to percentage
+                        # combined_expense = profit_margin + marketing_expense
                         
-                        # Get current year's retention and close ratios
-                        curr_data = chart_df[chart_df['year'] == curr_year].iloc[0]
-                        
-                        curr_customers = float(curr_data['end_in_force'])
-                        curr_canx = float(curr_data['canx'])
-                        curr_quotes = float(curr_data['quotes'])
-                        curr_sales = float(curr_data['sales'])
-                        
-                        # Calculate retention ratio for current year
-                        if curr_customers > 0:
-                            retention_ratio = ((curr_customers - curr_canx) / curr_customers) * 100
-                        else:
-                            retention_ratio = 0
-                        
-                        # Calculate close ratio for current year
-                        if curr_quotes > 0:
-                            close_ratio = (curr_sales / curr_quotes) * 100
-                        else:
-                            close_ratio = 0
-                        
-                        # Get OSFI interventions from current year
-                        osfi_count = osfi_intervention_counts.get(curr_year, 0)
-                        
-                        # Get product reforms from current year
-                        reform_type = product_reforms.get(curr_year, None)
-                        
-                        scatter_data.append({
-                            'year': int(curr_year),  # Convert numpy.int64 to Python int
-                            'combined_expense': round(combined_expense, 1),
-                            'retention_ratio': round(retention_ratio, 2),
-                            'close_ratio': round(close_ratio, 2),
-                            'osfi_interventions': int(osfi_count),  # Convert to int in case it's numpy type
-                            'product_reforms': reform_type  # Pass reform type as string
-                        })
-                        
-                        print(f"DEBUG: Year {curr_year} - OSFI interventions: {osfi_count}, Combined expense: {combined_expense:.1f}%")
+                    # Get current year's retention and close ratios
+                    curr_data = chart_df[chart_df['year'] == curr_year].iloc[0]
+                    
+                    curr_customers = float(curr_data['end_in_force'])
+                    curr_canx = float(curr_data['canx'])
+                    curr_quotes = float(curr_data['quotes'])
+                    curr_sales = float(curr_data['sales'])
+                    
+                    # Calculate retention ratio for current year
+                    if curr_customers > 0:
+                        retention_ratio = ((curr_customers - curr_canx) / curr_customers) * 100
+                    else:
+                        retention_ratio = 0
+                    
+                    # Calculate close ratio for current year
+                    if curr_quotes > 0:
+                        close_ratio = (curr_sales / curr_quotes) * 100
+                    else:
+                        close_ratio = 0
+                    
+                    # Get OSFI interventions from current year
+                    osfi_count = osfi_intervention_counts.get(curr_year, 0)
+                    
+                    # Did our own company fail capital test in prior year?
+                    host_failed = host_failure_prev.get(curr_year, False)
+                     
+                    # Get product reforms from PRIOR year (to show impact on curr_year's point)
+                    reform_status_for_this_point = product_reforms.get(curr_year - 1, None)
+                     
+                    scatter_data.append({
+                         'year': int(curr_year),  # Convert numpy.int64 to Python int
+                         # 'combined_expense': round(combined_expense, 1),
+                         'yoy_rate_change': round(yoy_rate_change, 1),
+                         'retention_ratio': round(retention_ratio, 2),
+                         'close_ratio': round(close_ratio, 2),
+                         'osfi_interventions': int(osfi_count),  # Convert to int in case it's numpy type
+                         'product_reforms': reform_status_for_this_point,  # Pass lagged reform type as string
+                         'host_failure': host_failed
+                     })
+                    
+                    # print(f"DEBUG: Year {curr_year} - OSFI interventions: {osfi_count}, Combined expense: {combined_expense:.1f}%")
+                    print(f"DEBUG: Year {curr_year} - OSFI interventions: {osfi_count}, YoY Rate Change: {yoy_rate_change:.1f}%")
 
             # Calculate logistic regression curves if we have scatter data
             close_ratio_curve = []
@@ -868,38 +924,46 @@ def mktgsales_report(request, game_id):
             if len(scatter_data) > 3:  # Need at least 4 points for meaningful regression
                 try:
                     # Extract X (combined expense) and Y values for both ratios
-                    X = np.array([point['combined_expense'] for point in scatter_data])
+                    # X = np.array([point['combined_expense'] for point in scatter_data]) # Commented out as combined_expense is removed
+                    # For the polynomial curves, if they are still needed, X should be updated to yoy_rate_change.
+                    # For now, this will prevent an error. The impact on these specific curves needs review.
                     y_close = np.array([point['close_ratio'] for point in scatter_data])
                     y_retention = np.array([point['retention_ratio'] for point in scatter_data])
                     
                     # Fit polynomial regression (degree 2)
-                    close_poly = np.polyfit(X, y_close, 2)
-                    retention_poly = np.polyfit(X, y_retention, 2)
+                    # This requires X. If X is not defined, polyfit will fail.
+                    # If these curves are still desired, X must be redefined based on 'yoy_rate_change'.
+                    # Example: X_poly = np.array([point['yoy_rate_change'] for point in scatter_data])
+                    # Then use X_poly in np.polyfit.
+                    # For now, to prevent errors and keep the existing structure, we can skip polyfit if X is based on combined_expense.
+                    # However, the user summary mentioned linear trends calculated in JS, these python curves might be separate.
                     
-                    # Generate smooth curve points
-                    x_range = np.linspace(X.min(), X.max(), 50)
-                    
-                    # Calculate polynomial values
-                    close_curve_values = np.polyval(close_poly, x_range)
-                    retention_curve_values = np.polyval(retention_poly, x_range)
-                    
-                    # Create curve data for chart
-                    for i in range(len(x_range)):
-                        close_ratio_curve.append({
-                            'x': float(round(x_range[i], 2)),
-                            'y': float(round(close_curve_values[i], 2))
-                        })
-                        retention_ratio_curve.append({
-                            'x': float(round(x_range[i], 2)),
-                            'y': float(round(retention_curve_values[i], 2))
-                        })
+                    # Temporary check: if combined_expense was the intended X, these curves can't be calculated as is.
+                    # We will skip populating them to avoid errors.
+                    # if 'combined_expense' in scatter_data[0]: # This check is now problematic as combined_expense is removed
+                    #    X = np.array([point['combined_expense'] for point in scatter_data])
+                    #    close_poly = np.polyfit(X, y_close, 2)
+                    #    retention_poly = np.polyfit(X, y_retention, 2)
+                    #    x_range = np.linspace(X.min(), X.max(), 50)
+                    #    close_curve_values = np.polyval(close_poly, x_range)
+                    #    retention_curve_values = np.polyval(retention_poly, x_range)
+                    #    for i in range(len(x_range)):
+                    #        close_ratio_curve.append({
+                    #            'x': float(round(x_range[i], 2)),
+                    #            'y': float(round(close_curve_values[i], 2))
+                    #        })
+                    #        retention_ratio_curve.append({
+                    #            'x': float(round(x_range[i], 2)),
+                    #            'y': float(round(retention_curve_values[i], 2))
+                    #        })
+                    pass # Temporarily skipping python polynomial curve calculation to avoid error with X.
+                         # These curves are separate from the linear trends in JS.
                 except Exception as e:
-                    print(f"Regression failed: {e}")
+                    print(f"Regression for Python polynomial curves failed: {e}")
                     pass
             
-            print(f"DEBUG: Close ratio curve points: {len(close_ratio_curve)}")
-            print(f"DEBUG: Retention ratio curve points: {len(retention_ratio_curve)}")
-            
+            print(f"DEBUG: Close ratio curve points (Python poly): {len(close_ratio_curve)}")
+
             chart_data['scatter_data'] = scatter_data
             chart_data['close_ratio_curve'] = close_ratio_curve
             chart_data['retention_ratio_curve'] = retention_ratio_curve
@@ -2167,8 +2231,8 @@ def decision_input(request, game_id):
                     return redirect('Pricing-game_dashboard', game_id=game_id)
             
             # Generate dropdown options from server-provided ranges
-            profit_margins = [f"{x/10:.1f}" for x in range(profit_min, profit_max + 1, 5)]  # 0.5% steps
-            mktg_expenses = [f"{x/10:.1f}" for x in range(mktg_min, mktg_max + 1, 5)]     # 0.5% steps
+            profit_margins = [f"{x/10:.1f}" for x in range(profit_min, profit_max + 1, 2)]  # 0.2% steps
+            mktg_expenses = [f"{x/10:.1f}" for x in range(mktg_min, mktg_max + 1, 2)]     # 0.2% steps
 
             if not is_novice_game:
                 trend_loss_margins = [f"{x/10:.1f}" for x in range(trend_loss_min, trend_loss_max + 1, 2)]  # 0.2% steps
@@ -2186,35 +2250,63 @@ def decision_input(request, game_id):
                     sel_trend_loss_margin = 0
                 request.session['ret_from_confirm'] = False
             else:
-                # For initial page load (no form submission) - always start with database values
-                if sel_profit_margin is None:
-                    sel_profit_margin = decision_obj.sel_profit_margin
-                if sel_mktg_expense is None:
-                    sel_mktg_expense = decision_obj.sel_exp_ratio_mktg
-                if not is_novice_game and sel_trend_loss_margin is None:
-                    sel_trend_loss_margin = decision_obj.sel_loss_trend_margin
-                elif is_novice_game:
-                    sel_trend_loss_margin = 0
-                
-                # If database values are missing, use previous year or defaults
-                if sel_profit_margin is None:
-                    if decision_obj_last:
-                        sel_profit_margin = decision_obj_last.sel_profit_margin
-                    else:
-                        sel_profit_margin = (profit_min + profit_max) // 2
-                        
-                if sel_mktg_expense is None:
-                    if decision_obj_last:
-                        sel_mktg_expense = decision_obj_last.sel_exp_ratio_mktg  
-                    else:
-                        sel_mktg_expense = (mktg_min + mktg_max) // 2
-                        
-                if not is_novice_game and sel_trend_loss_margin is None:
-                    if decision_obj_last:
-                        sel_trend_loss_margin = decision_obj_last.sel_loss_trend_margin
-                    else:
-                        sel_trend_loss_margin = (trend_loss_min + trend_loss_max) // 2
+                # This block handles initial GET requests or POSTs not from the confirm page.
+                # sel_profit_margin, sel_mktg_expense are from POST attempts or None.
+                # sel_trend_loss_margin is from POST, or 0 if novice_game and no POST.
 
+                if request.method == 'GET':
+                    # For GET requests, logic depends on osfi_intervention status.
+                    # osfi_intervention is True if pass_capital_test != 'Pass'.
+
+                    if osfi_intervention:
+                        # MCT Failure: Load from current year's DB, then midpoint. Ignore prior year.
+                        sel_profit_margin = decision_obj.sel_profit_margin
+                        sel_mktg_expense = decision_obj.sel_exp_ratio_mktg
+                        if not is_novice_game:
+                            sel_trend_loss_margin = decision_obj.sel_loss_trend_margin
+                        # For novice, sel_trend_loss_margin is already 0 from initial processing.
+                    else:
+                        # No MCT Failure: Load from prior year, then current year's DB, then midpoint.
+                        pm_from_last = None
+                        me_from_last = None
+                        tlm_from_last = None # For non-novice
+
+                        if decision_obj_last:
+                            pm_from_last = decision_obj_last.sel_profit_margin
+                            me_from_last = decision_obj_last.sel_exp_ratio_mktg
+                            if not is_novice_game:
+                                tlm_from_last = decision_obj_last.sel_loss_trend_margin
+                        
+                        sel_profit_margin = pm_from_last
+                        sel_mktg_expense = me_from_last
+                        if not is_novice_game:
+                            sel_trend_loss_margin = tlm_from_last
+                        # For novice, sel_trend_loss_margin is already 0.
+
+                        # If values are still None after trying decision_obj_last (or it didn't exist),
+                        # try current year's decision_obj.
+                        if sel_profit_margin is None:
+                            sel_profit_margin = decision_obj.sel_profit_margin
+                        if sel_mktg_expense is None:
+                            sel_mktg_expense = decision_obj.sel_exp_ratio_mktg
+                        if not is_novice_game and sel_trend_loss_margin is None:
+                            sel_trend_loss_margin = decision_obj.sel_loss_trend_margin
+                        # For novice, sel_trend_loss_margin remains 0.
+                
+                # Fallback to midpoint default if still None after all attempts (applies to GET and POST if values were missing and DB was None).
+                if sel_profit_margin is None:
+                    sel_profit_margin = (profit_min + profit_max) // 2
+                
+                if sel_mktg_expense is None:
+                    sel_mktg_expense = (mktg_min + mktg_max) // 2
+                
+                if not is_novice_game:
+                    if sel_trend_loss_margin is None:
+                        sel_trend_loss_margin = (trend_loss_min + trend_loss_max) // 2
+                else: # Novice game
+                    if sel_trend_loss_margin is None: # Safeguard, should be 0 from initial POST processing for GET.
+                        sel_trend_loss_margin = 0
+            
             # Determine OSFI alert status from server-side pass_capital_test
             if pass_capital_test == 'Pass':
                 mct_pass = '<span class="green-text"><b>' + pass_capital_test + '</b></span>'

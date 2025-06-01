@@ -64,8 +64,8 @@
                                         <span>Critical</span>
                                     </div>
                                     <div style="margin-left: 20px; display: flex; align-items: center;">
-                                        <span style="display: inline-block; width: 24px; height: 24px; background: #ccc; border: 2px solid #000; border-radius: 50%; margin-right: 8px;"></span>
-                                        <span>Product Reform Year</span>
+                                        <span style="display: inline-block; width: 20px; height: 20px; background: #ccc; border: 1px solid #000; margin-right: 8px;"></span>
+                                        <span>Prior Year Product Reform (Square marker)</span>
                                     </div>
                                 </div>
                             </div>
@@ -107,10 +107,11 @@
         // Chart and Toggle Logic
         const toggleButton = document.getElementById('toggleViewBtn');
         const tableContainer = document.querySelector('.mktgsales-data-table');
-        const activityChartContainer = document.getElementById('activityChart'); 
-        const financialRatioChartContainer = document.getElementById('financialRatioChart'); 
+        const activityChartContainer = document.getElementById('activityChart');
+        const financialRatioChartContainer = document.getElementById('financialRatioChart');
         const ratiosChartContainer = document.getElementById('ratiosChart'); // New chart container
         const scatterChartContainer = document.getElementById('scatterChart'); // Scatter chart container
+        const colorGuideContainer = document.getElementById('colorGuide');
 
         let isNoviceGame = false;
         try {
@@ -133,25 +134,14 @@
                 if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
                 if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
                 if (scatterChartContainer) scatterChartContainer.style.display = 'none';
-                return;
+                if (colorGuideContainer) colorGuideContainer.style.display = 'none';
+                // return; // Removed return to allow rest of the script to run for non-chart elements if any
             }
         } else if ("{{chart_data}}" === "None" || "{{chart_data}}" === "") {
              console.log('chart_data was None or empty in Django context, chartData will remain null.');
         }
 
-        // Placeholder for OSFI failure data - this should be populated from your Django view
-        // Example structure: {'2023': ['CompanyA', 'CompanyB'], '2022': ['CompanyC']}
-        let osfiFailureData = {}; 
-        const osfiDataElement = document.getElementById('osfiFailureDataJson');
-        if (osfiDataElement) {
-            try {
-                osfiFailureData = JSON.parse(osfiDataElement.textContent);
-            } catch (e) {
-                console.error('Error parsing osfi_failure_data from json_script:', e);
-                // Decide if you want to hide charts or just proceed without OSFI annotations
-            }
-        }
-
+        // Moved function definitions to a higher scope
         function setButtonState(showChart) {
             if (toggleButton) {
                 if (showChart) {
@@ -166,12 +156,69 @@
             }
         }
 
-        if (isNoviceGame) {
-            console.log('Novice game: Initial HTML should reflect chart-first view.');
-            setButtonState(true);
-        } else {
-            console.log('Non-novice game: Initial HTML should reflect table-first view.');
-            setButtonState(false); 
+        function setViewVisibility(showCharts) {
+            if (showCharts) {
+                if (tableContainer) tableContainer.style.display = 'none';
+                if (activityChartContainer) activityChartContainer.style.display = 'block';
+                if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'block';
+                if (ratiosChartContainer) ratiosChartContainer.style.display = 'block';
+                if (scatterChartContainer) scatterChartContainer.style.display = 'block';
+                if (colorGuideContainer) colorGuideContainer.style.display = 'block';
+            } else {
+                if (tableContainer) tableContainer.style.display = 'block';
+                if (activityChartContainer) activityChartContainer.style.display = 'none';
+                if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
+                if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
+                if (scatterChartContainer) scatterChartContainer.style.display = 'none';
+                if (colorGuideContainer) colorGuideContainer.style.display = 'none';
+            }
+            setButtonState(showCharts);
+        }
+
+        // Logic for initial view based on localStorage or game type default
+        const preferredView = localStorage.getItem('mktgSalesView');
+        let showChartsInitialState = isNoviceGame; // Default to game type if no preference
+
+        if (preferredView === 'chart') {
+            showChartsInitialState = true;
+        } else if (preferredView === 'table') {
+            showChartsInitialState = false;
+        }
+        // If preferredView is null, showChartsInitialState remains based on isNoviceGame
+
+        // Apply the initial visibility state, ensuring elements exist
+        if (tableContainer && activityChartContainer && financialRatioChartContainer && ratiosChartContainer && scatterChartContainer && colorGuideContainer && toggleButton) {
+            setViewVisibility(showChartsInitialState);
+        }
+
+
+        if (toggleButton) {
+            toggleButton.addEventListener('click', function() {
+                const areChartsCurrentlyVisible = activityChartContainer && activityChartContainer.style.display === 'block';
+                const newViewIsCharts = !areChartsCurrentlyVisible;
+
+                setViewVisibility(newViewIsCharts); // Update visibility and button text
+
+                if (newViewIsCharts) {
+                    localStorage.setItem('mktgSalesView', 'chart');
+                } else {
+                    localStorage.setItem('mktgSalesView', 'table');
+                }
+            });
+        }
+
+
+        // Placeholder for OSFI failure data - this should be populated from your Django view
+        // Example structure: {'2023': ['CompanyA', 'CompanyB'], '2022': ['CompanyC']}
+        let osfiFailureData = {}; 
+        const osfiDataElement = document.getElementById('osfiFailureDataJson');
+        if (osfiDataElement) {
+            try {
+                osfiFailureData = JSON.parse(osfiDataElement.textContent);
+            } catch (e) {
+                console.error('Error parsing osfi_failure_data from json_script:', e);
+                // Decide if you want to hide charts or just proceed without OSFI annotations
+            }
         }
 
         if (chartData && chartData.years && chartData.years.length > 0) {
@@ -466,36 +513,81 @@
                 };
                 
                 // Skip the first 5 points when preparing the data
-                chartData.scatter_data.slice(5).forEach(point => {
+                console.log('Full scatter data points:', chartData.scatter_data);
+                
+                chartData.scatter_data.slice(5).forEach((point, index) => {
                     // Use the color function directly with OSFI interventions
                     const pointColor = getColor(point.osfi_interventions);
                     
+                    // Check if this point has reforms
+                    const hasReforms = (point) => {
+                        console.log('Checking reforms for year', point.year, {
+                            reforms: point.product_reforms,
+                            reformType: typeof point.product_reforms,
+                            reformKeys: point.product_reforms ? Object.keys(point.product_reforms) : [],
+                            fullPoint: point
+                        });
+
+                        // If it's an object with specific reform types
+                        if (point.product_reforms && typeof point.product_reforms === 'object') {
+                            const reforms = point.product_reforms;
+                            return Object.values(reforms).some(val => val === true || val === 'Yes' || val === 'yes');
+                        }
+
+                        // If it's a direct string or boolean
+                        if (point.product_reforms) {
+                            if (typeof point.product_reforms === 'boolean') return point.product_reforms;
+                            if (typeof point.product_reforms === 'string') {
+                                const lowered = point.product_reforms.toLowerCase();
+                                return lowered === 'yes' || lowered === 'true' || 
+                                       lowered === 'bi' || lowered === 'cl' || 
+                                       lowered === 'both';
+                            }
+                        }
+                        
+                        return false;
+                    };
+
+                    const reformStatus = hasReforms(point);
+                    console.log(`Year ${point.year} final reform status:`, {
+                        rawReformValue: point.product_reforms,
+                        computedStatus: reformStatus,
+                        type: typeof point.product_reforms,
+                        point: point
+                    });
+
                     const scatterPoint = {
-                        x: point.combined_expense, // Changed from rate_increase
+                        x: point.yoy_rate_change,
                         y: point.close_ratio,
                         fillColor: pointColor,
-                        strokeColor: point.product_reforms ? '#000000' : pointColor,
-                        markerSize: point.product_reforms ? 12 : 8,
-                        strokeWidth: point.product_reforms ? 2 : 0,
-                        // Include metadata for tooltip
+                        marker: {
+                            size: 8,
+                            strokeColor: reformStatus ? '#000000' : pointColor,
+                            strokeWidth: reformStatus ? 2 : 0,
+                            fillColor: pointColor
+                        },
                         year: point.year,
                         osfi_interventions: point.osfi_interventions,
-                        product_reforms: point.product_reforms
+                        product_reforms: point.product_reforms,
+                        host_failure: point.host_failure
                     };
                     
                     closeRatioData.push(scatterPoint);
                     
                     retentionData.push({
-                        x: point.combined_expense, // Changed from rate_increase
+                        x: point.yoy_rate_change,
                         y: point.retention_ratio,
                         fillColor: pointColor,
-                        strokeColor: point.product_reforms ? '#000000' : pointColor,
-                        markerSize: point.product_reforms ? 12 : 8,
-                        strokeWidth: point.product_reforms ? 2 : 0,
-                        // Include metadata for tooltip
+                        marker: {
+                            size: 8,
+                            strokeColor: reformStatus ? '#000000' : pointColor,
+                            strokeWidth: reformStatus ? 2 : 0,
+                            fillColor: pointColor
+                        },
                         year: point.year,
                         osfi_interventions: point.osfi_interventions,
-                        product_reforms: point.product_reforms
+                        product_reforms: point.product_reforms,
+                        host_failure: point.host_failure
                     });
                 });
                 
@@ -521,52 +613,120 @@
                 const testCloseData = closeRatioData.slice(0, 5);
                 console.log('DEBUG: Test data:', JSON.stringify(testCloseData));
                 
-                // Create a simple test chart first
-                console.log('Creating minimal test chart...');
-                const testOptions = {
-                    series: [{
-                        name: 'Test Series',
-                        data: [{x: 1, y: 10}, {x: 2, y: 20}, {x: 3, y: 15}, {x: 4, y: 25}, {x: 5, y: 30}]
-                    }],
-                    chart: {
-                        height: 350,
-                        type: 'scatter',
-                    },
-                    xaxis: {
-                        type: 'numeric'
-                    },
-                    yaxis: {
-                        type: 'numeric'
+                // Build discrete marker list for points with product reforms
+                const discreteMarkers = [];
+                closeRatioData.forEach((pt, idx) => {
+                    const reformVal = pt.product_reforms; // This is the lagged value from Python
+                    const reformFlag = reformVal && (
+                                        (typeof reformVal === 'boolean' && reformVal) ||
+                                        (typeof reformVal ==='string' && ['yes', 'true', 'bi', 'cl', 'both'].includes(reformVal.toLowerCase())) ||
+                                        (typeof reformVal === 'object' && Object.values(reformVal).some(v => v))
+                                     );
+                    if (reformFlag) {
+                        // Add marker for both Sales and Retention series (seriesIndex 0 and 1)
+                        [0, 1].forEach(sIdx => {
+                            discreteMarkers.push({
+                                seriesIndex: sIdx,
+                                dataPointIndex: idx,
+                                size: 8,
+                                strokeWidth: 1, // Thin black border for the square
+                                strokeColor: '#000000',
+                                fillColor: pt.fillColor, // Keep original health color
+                                shape: 'square' // Change shape to square for reform points
+                            });
+                        });
                     }
-                };
-                
+                });
+
+                // Helper: linear regression (least squares)
+                function linearRegression(dataPoints) {
+                    const n = dataPoints.length;
+                    if (n === 0) return {slope: 0, intercept: 0};
+                    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+                    dataPoints.forEach(p => {
+                        sumX += p.x;
+                        sumY += p.y;
+                        sumXY += p.x * p.y;
+                        sumXX += p.x * p.x;
+                    });
+                    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX || 1e-6);
+                    const intercept = (sumY - slope * sumX) / n;
+                    return {slope, intercept};
+                }
+
+                // Filter out points WITH product reforms for regression calculations
+                const salesPointsNoReform = closeRatioData.filter((p) => {
+                    const r = p.product_reforms;
+                    if (!r) return true;
+                    if (typeof r === 'boolean') return !r;
+                    if (typeof r === 'string') return !['yes','true','bi','cl','both'].includes(r.toLowerCase());
+                    if (typeof r === 'object') return !Object.values(r).some(v => v);
+                    return true;
+                });
+                const retentionPointsNoReform = retentionData.filter((p, idx) => {
+                    // same filtering logic, rely on closeRatioData idx
+                    const r = closeRatioData[idx].product_reforms;
+                    if (!r) return true;
+                    if (typeof r === 'boolean') return !r;
+                    if (typeof r === 'string') return !['yes','true','bi','cl','both'].includes(r.toLowerCase());
+                    if (typeof r === 'object') return !Object.values(r).some(v => v);
+                    return true;
+                });
+
+                // Compute regression params
+                const salesReg = linearRegression(salesPointsNoReform);
+                const retentionReg = linearRegression(retentionPointsNoReform);
+
+                // Build regression line data (50 steps)
+                const allX = [...closeRatioData.map(p => p.x)];
+                const minX = Math.min(...allX);
+                const maxX = Math.max(...allX);
+                const steps = 50;
+                const salesTrend = [];
+                const retentionTrend = [];
+                for (let i = 0; i <= steps; i++) {
+                    const xVal = minX + (maxX - minX) * i / steps;
+                    salesTrend.push({x: xVal, y: salesReg.slope * xVal + salesReg.intercept});
+                    retentionTrend.push({x: xVal, y: retentionReg.slope * xVal + retentionReg.intercept});
+                }
+
                 var options4 = {
                     series: [
-                        { name: 'Close Ratio', type: 'scatter', data: closeRatioData },
+                        { name: 'Sales Ratio', type: 'scatter', data: closeRatioData },
                         { name: 'Retention Ratio', type: 'scatter', data: retentionData },
-                        { name: 'Close Ratio Trend', type: 'line', data: chartData.close_ratio_curve || [] },
-                        { name: 'Retention Ratio Trend', type: 'line', data: chartData.retention_ratio_curve || [] }
+                        { name: 'Sales Ratio Trend', type: 'line', data: salesTrend },
+                        { name: 'Retention Ratio Trend', type: 'line', data: retentionTrend }
                     ],
                     chart: {
                         height: 350,
-                        type: 'line',  // Change to 'line' for mixed chart
+                        type: 'line',
                         toolbar: { show: true },
                         zoom: { enabled: true, type: 'xy' }
                     },
                     stroke: {
-                        curve: ['straight', 'straight', 'smooth', 'smooth'],  // Straight for scatter, smooth for regression lines
-                        width: [0, 0, 2, 2],  // No line for scatter points, width 2 for regression lines
-                        dashArray: [0, 0, 0, 0]  // No dashes
+                        curve: ['straight', 'straight', 'smooth', 'smooth'],
+                        width: [0, 0, 2, 2],
+                        dashArray: [0, 0, 0, 0]
                     },
-                    colors: ['#FF4560', '#00E396', '#FF4560', '#00E396'], // Red for close, green for retention
-                    title: { text: 'Impact of Profit Margin + Marketing Expense on Close & Retention Ratios' },
+                    colors: ['#FF4560', '#00E396', '#FF4560', '#00E396'],
+                    markers: {
+                        size: [8, 8, 0, 0], // Scatter series size, then line series size (no markers for lines)
+                        strokeWidth: [0, 0, 0, 0], // Default stroke for scatter points (non-reform)
+                        shape: ['circle', 'circle', 'circle', 'circle'], // Default shape for scatter points is circle
+                        hover: {
+                            size: 10,
+                            sizeOffset: 2
+                        },
+                        discrete: discreteMarkers // Apply specific markers for reform points
+                    },
+                    title: { text: 'Impact of YoY Submitted Rate Change on Sales & Retention Ratios' },
                     xaxis: {
-                        title: { text: 'Profit Margin + Marketing Expense (%)' },
+                        title: { text: 'YoY Rate Change from Prior Decision Year (%)' },
                         type: 'numeric',
-                        min: 0,  // Start from 0% 
-                        max: 30, // Up to 30% for combined expense
+                        min: minX - 5,
+                        max: maxX + 5,
                         labels: { formatter: val => val.toFixed(1) + '%' },
-                        tickAmount: 6 // Show ticks at 0, 6, 12, 18, 24, 30
+                        tickAmount: 6
                     },
                     yaxis: {
                         title: { text: 'Ratio (%)' },
@@ -579,13 +739,6 @@
                     grid: {
                         xaxis: { lines: { show: true } },
                         yaxis: { lines: { show: true } }
-                    },
-                    markers: {
-                        size: [8, 8, 0, 0],  // Size for each series: scatter points 8, lines 0
-                        strokeWidth: [1, 1, 0, 0],  // Stroke width for each series
-                        hover: {
-                            sizeOffset: 3
-                        }
                     },
                     dataLabels: {
                         enabled: false  // Turn on temporarily to debug
@@ -603,11 +756,11 @@
                             
                             let tooltipHtml = '<div style="padding: 10px; font-size: 12px;">';
                             tooltipHtml += '<div>Year: ' + (point.year || 'N/A') + '</div>';
-                            tooltipHtml += '<div>Profit + Marketing: ' + point.x.toFixed(1) + '%</div>';
+                            tooltipHtml += '<div>YoY Rate Change for ' + point.year + ' (vs ' + (point.year - 1) + '): ' + point.x.toFixed(1) + '%</div>';
                             tooltipHtml += '<div>' + seriesName + ': ' + point.y.toFixed(1) + '%</div>';
                             tooltipHtml += '<div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ddd;">';
-                            tooltipHtml += '<div>Industry MCT Failures: ' + (point.osfi_interventions || 0) + '</div>';
-                            tooltipHtml += '<div>Product Reforms: ' + (point.product_reforms ? point.product_reforms : 'None') + '</div>';
+                            tooltipHtml += '<div>Prior Year Industry MCT Failures: ' + (point.osfi_interventions || 0) + '</div>';
+                            tooltipHtml += '<div>Prior Year Product Reforms: ' + (point.product_reforms ? 'Yes' : 'No') + '</div>';
                             tooltipHtml += '</div></div>';
                             
                             return tooltipHtml;
@@ -624,8 +777,6 @@
                     <div><span style="display:inline-block;width:12px;height:12px;background:#FEB019;border-radius:50%;"></span> 1</div>
                     <div><span style="display:inline-block;width:12px;height:12px;background:#FF6347;border-radius:50%;"></span> 2</div>
                     <div><span style="display:inline-block;width:12px;height:12px;background:#FF4560;border-radius:50%;"></span> 3+</div>
-                    <div style="margin-left: 20px;"><strong>Product Reforms:</strong></div>
-                    <div><span style="display:inline-block;width:12px;height:12px;background:#ccc;border:2px solid #000;border-radius:50%;"></span> BI/CL/Both (larger)</div>
                 `;
                 scatterChartContainer.appendChild(legendContainer);
                 
@@ -643,25 +794,6 @@
                 console.log('  - scatter_data length:', chartData && chartData.scatter_data ? chartData.scatter_data.length : 'N/A');
             }
 
-            function setViewVisibility(showCharts) {
-                if (showCharts) {
-                    if (tableContainer) tableContainer.style.display = 'none';
-                    if (activityChartContainer) activityChartContainer.style.display = 'block';
-                    if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'block';
-                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'block';
-                    if (scatterChartContainer) scatterChartContainer.style.display = 'block';
-                    if (document.getElementById('colorGuide')) document.getElementById('colorGuide').style.display = 'block';
-                } else {
-                    if (tableContainer) tableContainer.style.display = 'block';
-                    if (activityChartContainer) activityChartContainer.style.display = 'none';
-                    if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
-                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
-                    if (scatterChartContainer) scatterChartContainer.style.display = 'none';
-                    if (document.getElementById('colorGuide')) document.getElementById('colorGuide').style.display = 'none';
-                }
-                setButtonState(showCharts);
-            }
-
             // Render all available charts
             const chartsToRender = [chart1, chart2, chart3, chart4].filter(chart => chart !== null);
             
@@ -674,9 +806,9 @@
                         chart2.hideSeries('Cancellations'); // Hide Cancellations by default in Chart 2
                         // chart3.hideSeries('SeriesNameToHideByDefault'); // If any series in chart3 needs to be hidden by default
                         if (chart4) {
-                            chart4.hideSeries('Retention Ratio'); // Hide Retention Ratio by default
-                            chart4.hideSeries('Close Ratio Trend'); // Hide Close Ratio Trend by default
-                            chart4.hideSeries('Retention Ratio Trend'); // Hide Retention Ratio Trend by default
+                            chart4.hideSeries('Retention Ratio');
+                            chart4.hideSeries('Sales Ratio Trend'); // updated name
+                            chart4.hideSeries('Retention Ratio Trend');
                             console.log('Retention Ratio and trend lines hidden by default in scatter plot.');
                         }
                         console.log('Sales and Cancellations (Chart 2) series hidden by default.');
@@ -699,22 +831,20 @@
                 if(financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
                 if(ratiosChartContainer) ratiosChartContainer.style.display = 'none';
                 if(scatterChartContainer) scatterChartContainer.style.display = 'none';
+                if(colorGuideContainer) colorGuideContainer.style.display = 'none'; // Also hide color guide
             }
 
-            if (toggleButton) {
-                toggleButton.addEventListener('click', function() {
-                    const areChartsCurrentlyVisible = activityChartContainer && activityChartContainer.style.display === 'block';
-                    setViewVisibility(!areChartsCurrentlyVisible);
-                });
-            }
-
-        } else {
+        } else { // This block handles when chartData is invalid or empty
             console.log('Chart data is invalid or has no years. Hiding button and charts.');
             if (toggleButton) toggleButton.style.display = 'none';
             if (activityChartContainer) activityChartContainer.style.display = 'none';
             if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
             if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
             if (scatterChartContainer) scatterChartContainer.style.display = 'none';
+            if (colorGuideContainer) colorGuideContainer.style.display = 'none';
+            // The table's visibility will depend on the initial Django-rendered styles.
+            // If initial style was display:block (non-novice), table shows.
+            // If initial style was display:none (novice), table remains hidden. This is acceptable.
         }
     });
 </script>

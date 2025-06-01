@@ -465,7 +465,8 @@
                     return '#FF4560'; // Red for 3+
                 };
                 
-                chartData.scatter_data.forEach(point => {
+                // Skip the first 5 points when preparing the data
+                chartData.scatter_data.slice(5).forEach(point => {
                     // Use the color function directly with OSFI interventions
                     const pointColor = getColor(point.osfi_interventions);
                     

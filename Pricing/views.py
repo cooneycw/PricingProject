@@ -764,6 +764,90 @@ def mktgsales_report(request, game_id):
                     'cancellation_rate': cancellation_rate_list,
                     'sales_ratio': close_ratio_list # Changed key name
                 }
+                
+                # --- SCATTER PLOT DATA PREPARATION ---
+                # Calculate rate increases and prepare scatter plot data
+                scatter_data = []
+                
+                # Get OSFI intervention counts and product reform data
+                industry_data = Industry.objects.filter(game_id=game)
+                claim_trends_data = ClaimTrends.objects.filter(game_id=game)
+                
+                # Create a dictionary for OSFI intervention counts by year
+                osfi_intervention_counts = {}
+                for year in chart_df['year'].unique():
+                    # Count capital test failures in the industry for each year
+                    failures = industry_data.filter(year=year, capital_test='Fail').count()
+                    osfi_intervention_counts[year] = failures
+                
+                # Get product reform data
+                product_reforms = {}
+                for ct in claim_trends_data:
+                    try:
+                        trends = ct.claim_trends
+                        bi_reform = trends.get('bi_reform', {}).get(str(ct.year), 0)
+                        cl_reform = trends.get('cl_reform', {}).get(str(ct.year), 0)
+                        # Count as reform if either BI or CL reform happened
+                        product_reforms[ct.year] = 1 if (bi_reform or cl_reform) else 0
+                    except:
+                        product_reforms[ct.year] = 0
+                
+                # Calculate rate increases and align with next year's ratios
+                years_sorted = sorted(chart_df['year'].unique())
+                for i in range(len(years_sorted) - 1):
+                    curr_year = years_sorted[i]
+                    next_year = years_sorted[i + 1]
+                    
+                    # Get current and previous year data
+                    curr_data = chart_df[chart_df['year'] == curr_year].iloc[0]
+                    next_data = chart_df[chart_df['year'] == next_year].iloc[0]
+                    
+                    # Calculate rate increase (percentage change in average premium)
+                    if i > 0:
+                        prev_year = years_sorted[i - 1]
+                        prev_data = chart_df[chart_df['year'] == prev_year].iloc[0]
+                        prev_premium = float(prev_data['avg_prem'])
+                        curr_premium = float(curr_data['avg_prem'])
+                        
+                        if prev_premium > 0:
+                            rate_increase = ((curr_premium - prev_premium) / prev_premium) * 100
+                        else:
+                            rate_increase = 0
+                        
+                        # Get next year's retention and close ratios
+                        next_customers = float(next_data['end_in_force'])
+                        next_canx = float(next_data['canx'])
+                        next_quotes = float(next_data['quotes'])
+                        next_sales = float(next_data['sales'])
+                        
+                        # Calculate retention ratio for next year
+                        if next_customers > 0:
+                            retention_ratio = ((next_customers - next_canx) / next_customers) * 100
+                        else:
+                            retention_ratio = 0
+                        
+                        # Calculate close ratio for next year
+                        if next_quotes > 0:
+                            close_ratio = (next_sales / next_quotes) * 100
+                        else:
+                            close_ratio = 0
+                        
+                        # Get OSFI interventions from PRIOR year (affects current year's rates)
+                        osfi_count = osfi_intervention_counts.get(prev_year, 0)
+                        
+                        # Get product reforms from PRIOR year
+                        reform_count = product_reforms.get(prev_year, 0)
+                        
+                        scatter_data.append({
+                            'year': curr_year,  # Year of rate change
+                            'rate_increase': round(rate_increase, 2),
+                            'retention_ratio': round(retention_ratio, 2),
+                            'close_ratio': round(close_ratio, 2),
+                            'osfi_interventions': osfi_count,
+                            'product_reforms': reform_count
+                        })
+                
+                chart_data['scatter_data'] = scatter_data
             else:
                 chart_data = None # Explicitly set to None if no chart data
 

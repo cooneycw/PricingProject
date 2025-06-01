@@ -42,6 +42,7 @@
                             <div id="activityChart" style="{{ initial_chart_style|default:'display: none' }};"></div>
                             <div id="financialRatioChart" style="{{ initial_chart_style|default:'display: none' }}; margin-top: 20px;"></div>
                             <div id="ratiosChart" style="{{ initial_chart_style|default:'display: none' }}; margin-top: 20px;"></div>
+                            <div id="scatterChart" style="{{ initial_chart_style|default:'display: none' }}; margin-top: 20px;"></div>
                         </div>
 
                 {% endif %}
@@ -81,6 +82,7 @@
         const activityChartContainer = document.getElementById('activityChart'); 
         const financialRatioChartContainer = document.getElementById('financialRatioChart'); 
         const ratiosChartContainer = document.getElementById('ratiosChart'); // New chart container
+        const scatterChartContainer = document.getElementById('scatterChart'); // Scatter chart container
 
         let isNoviceGame = false;
         try {
@@ -100,6 +102,7 @@
                 if (activityChartContainer) activityChartContainer.style.display = 'none';
                 if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
                 if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
+                if (scatterChartContainer) scatterChartContainer.style.display = 'none';
                 return;
             }
         } else if ("{{chart_data}}" === "None" || "{{chart_data}}" === "") {
@@ -413,24 +416,170 @@
                 chart3 = new ApexCharts(ratiosChartContainer, options3);
             }
 
+            // --- Chart 4: Rate Impact Scatter Plot ---
+            var chart4 = null;
+            if (scatterChartContainer && chartData.scatter_data && chartData.scatter_data.length > 0) {
+                // Prepare data for scatter plot
+                const retentionData = [];
+                const closeRatioData = [];
+                
+                // Color scale for OSFI interventions (0=green, 1=yellow, 2=orange, 3+=red)
+                const osfiColorScale = ['#00E396', '#FEB019', '#FF6600', '#FF0000'];
+                
+                chartData.scatter_data.forEach(point => {
+                    // Determine color based on OSFI interventions
+                    let colorIndex = Math.min(point.osfi_interventions, 3);
+                    let pointColor = osfiColorScale[colorIndex];
+                    
+                    // Determine marker size based on product reforms (base size 6, +4 if reform)
+                    let markerSize = point.product_reforms > 0 ? 10 : 6;
+                    
+                    // Common properties for both series
+                    const commonProps = {
+                        x: point.rate_increase,
+                        fillColor: pointColor,
+                        strokeColor: point.product_reforms > 0 ? '#000000' : pointColor,
+                        meta: {
+                            year: point.year,
+                            osfi: point.osfi_interventions,
+                            reforms: point.product_reforms
+                        }
+                    };
+                    
+                    retentionData.push({
+                        ...commonProps,
+                        y: point.retention_ratio
+                    });
+                    
+                    closeRatioData.push({
+                        ...commonProps,
+                        y: point.close_ratio
+                    });
+                });
+                
+                var options4 = {
+                    series: [
+                        { name: 'Retention Ratio', type: 'scatter', data: retentionData },
+                        { name: 'Close Ratio', type: 'scatter', data: closeRatioData }
+                    ],
+                    chart: {
+                        height: 350,
+                        type: 'scatter',
+                        toolbar: { show: true },
+                        zoom: { enabled: true, type: 'xy' }
+                    },
+                    title: { text: 'Rate Increase Impact on Retention & Close Ratios' },
+                    xaxis: {
+                        title: { text: 'Rate Increase (%)' },
+                        labels: {
+                            formatter: function(val) {
+                                return val !== undefined && val !== null ? val.toFixed(1) + '%' : '';
+                            }
+                        }
+                    },
+                    yaxis: {
+                        title: { text: 'Ratio (%)' },
+                        min: 0,
+                        max: 110,
+                        labels: {
+                            formatter: function(val) {
+                                return val !== undefined && val !== null ? val.toFixed(0) + '%' : '';
+                            }
+                        }
+                    },
+                    grid: {
+                        xaxis: { lines: { show: true } },
+                        yaxis: { lines: { show: true } }
+                    },
+                    markers: {
+                        size: function(val, opts) {
+                            // Dynamic marker size based on product reforms
+                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].meta.reforms > 0 ? 10 : 6;
+                        },
+                        strokeWidth: function(val, opts) {
+                            // Black border for points with product reforms
+                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].meta.reforms > 0 ? 2 : 0;
+                        }
+                    },
+                    legend: { 
+                        show: true, 
+                        position: 'top',
+                        horizontalAlign: 'left',
+                        markers: { width: 12, height: 12 }
+                    },
+                    tooltip: {
+                        custom: function({ series, seriesIndex, dataPointIndex, w }) {
+                            const point = w.config.series[seriesIndex].data[dataPointIndex];
+                            const seriesName = w.config.series[seriesIndex].name;
+                            
+                            let tooltipHtml = '<div class="apexcharts-tooltip-box" style="padding: 10px;">';
+                            tooltipHtml += '<div><strong>Year: ' + point.meta.year + '</strong></div>';
+                            tooltipHtml += '<div>Rate Increase: ' + point.x.toFixed(1) + '%</div>';
+                            tooltipHtml += '<div>' + seriesName + ': ' + point.y.toFixed(1) + '%</div>';
+                            tooltipHtml += '<div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ddd;">';
+                            tooltipHtml += '<div>OSFI Interventions (Prior Year): ' + point.meta.osfi + '</div>';
+                            tooltipHtml += '<div>Product Reforms (Prior Year): ' + (point.meta.reforms > 0 ? 'Yes' : 'No') + '</div>';
+                            tooltipHtml += '</div></div>';
+                            
+                            return tooltipHtml;
+                        }
+                    },
+                    annotations: {
+                        yaxis: [
+                            {
+                                y: 100,
+                                strokeDashArray: 5,
+                                borderColor: '#775DD0',
+                                label: {
+                                    borderColor: '#775DD0',
+                                    style: { color: '#fff', background: '#775DD0' },
+                                    text: '100% Retention'
+                                }
+                            }
+                        ]
+                    }
+                };
+                
+                // Add a custom legend for OSFI intervention colors
+                const legendContainer = document.createElement('div');
+                legendContainer.style.cssText = 'margin-top: 10px; font-size: 12px; display: flex; gap: 20px; flex-wrap: wrap;';
+                legendContainer.innerHTML = `
+                    <div><strong>OSFI Interventions:</strong></div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#00E396;border-radius:50%;"></span> None</div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#FEB019;border-radius:50%;"></span> 1</div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#FF6600;border-radius:50%;"></span> 2</div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;"></span> 3+</div>
+                    <div style="margin-left: 20px;"><strong>Product Reforms:</strong></div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#ccc;border:2px solid #000;border-radius:50%;"></span> Yes (larger marker)</div>
+                `;
+                scatterChartContainer.appendChild(legendContainer);
+                
+                chart4 = new ApexCharts(scatterChartContainer, options4);
+            }
+
             function setViewVisibility(showCharts) {
                 if (showCharts) {
                     if (tableContainer) tableContainer.style.display = 'none';
                     if (activityChartContainer) activityChartContainer.style.display = 'block';
                     if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'block';
                     if (ratiosChartContainer) ratiosChartContainer.style.display = 'block'; // Show new chart
+                    if (scatterChartContainer) scatterChartContainer.style.display = 'block'; // Show scatter chart
                 } else {
                     if (tableContainer) tableContainer.style.display = 'block';
                     if (activityChartContainer) activityChartContainer.style.display = 'none';
                     if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
                     if (ratiosChartContainer) ratiosChartContainer.style.display = 'none'; // Hide new chart
+                    if (scatterChartContainer) scatterChartContainer.style.display = 'none'; // Hide scatter chart
                 }
                 setButtonState(showCharts);
             }
 
-            if (chart1 && chart2 && chart3) { // Check for chart3 as well
-                Promise.all([chart1.render(), chart2.render(), chart3.render()]).then(() => { // Render chart3
-                    console.log('All three charts rendered successfully.');
+            // Render all available charts
+            const chartsToRender = [chart1, chart2, chart3, chart4].filter(chart => chart !== null);
+            
+            if (chartsToRender.length > 0) {
+                Promise.all(chartsToRender.map(chart => chart.render())).then(() => {
+                    console.log(`All ${chartsToRender.length} charts rendered successfully.`);
                     try {
                         // chart1.hideSeries('Cancellations'); // Cancellations no longer in chart1
                         chart2.hideSeries('Sales');
@@ -446,14 +595,16 @@
                     if (activityChartContainer) activityChartContainer.style.display = 'none';
                     if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
                     if (ratiosChartContainer) ratiosChartContainer.style.display = 'none'; // Hide new chart on error
+                    if (scatterChartContainer) scatterChartContainer.style.display = 'none'; // Hide scatter chart on error
                 });
             } else {
                 if (toggleButton) toggleButton.style.display = 'none';
-                console.error('One or more chart objects not initialized, cannot render.');
+                console.error('No charts were initialized, cannot render.');
                 // Ensure all chart containers are hidden if any object fails to initialize
                 if(activityChartContainer) activityChartContainer.style.display = 'none';
                 if(financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
                 if(ratiosChartContainer) ratiosChartContainer.style.display = 'none';
+                if(scatterChartContainer) scatterChartContainer.style.display = 'none';
             }
 
             if (toggleButton) {
@@ -469,6 +620,7 @@
             if (activityChartContainer) activityChartContainer.style.display = 'none';
             if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
             if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
+            if (scatterChartContainer) scatterChartContainer.style.display = 'none';
         }
     });
 </script>

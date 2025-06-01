@@ -805,6 +805,23 @@ def financials_report(request, game_id):
 
     financial_data_table = '<p>No financial data available.</p>'  # Ensure always defined
 
+    # Determine if this is a novice game
+    is_novice_game = False
+    try:
+        game_prefs = GamePrefs.objects.get(user=game.initiator)
+        if game_prefs.game_difficulty == 'Novice':
+            is_novice_game = True
+    except GamePrefs.DoesNotExist:
+        pass
+
+    # Determine initial styles based on game difficulty
+    if is_novice_game:
+        initial_chart_style = "display: block;"
+        initial_table_style = "display: none;"
+    else:
+        initial_chart_style = "display: none;"
+        initial_table_style = "display: block;"
+
     financial_data = Financials.objects.filter(game_id=game, player_id=user)
     unique_years = financial_data.order_by('-year').values_list('year', flat=True).distinct()
     latest_year = unique_years[0] if unique_years else None
@@ -955,6 +972,9 @@ def financials_report(request, game_id):
         'latest_year': latest_year,
         'selected_year': int(selected_year) if selected_year else None,  # Convert selected_year to int if it's not None
         'chart_data': chart_data,
+        'is_novice_game': is_novice_game,
+        'initial_chart_style': initial_chart_style,
+        'initial_table_style': initial_table_style,
     }
     return render(request, template_name, context)
 

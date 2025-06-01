@@ -922,6 +922,9 @@ def mktgsales_report(request, game_id):
                         print(f"Logistic regression failed: {e}")
                         pass
                 
+                print(f"DEBUG: Close ratio curve points: {len(close_ratio_curve)}")
+                print(f"DEBUG: Retention ratio curve points: {len(retention_ratio_curve)}")
+                
                 chart_data['scatter_data'] = scatter_data
                 chart_data['close_ratio_curve'] = close_ratio_curve
                 chart_data['retention_ratio_curve'] = retention_ratio_curve

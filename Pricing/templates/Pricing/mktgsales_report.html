@@ -477,6 +477,11 @@
                     'max=', Math.max(...retentionData.map(p => p.y)));
                 console.log('DEBUG: First 3 retention data points:', JSON.stringify(retentionData.slice(0, 3)));
                 console.log('DEBUG: First 3 close ratio data points:', JSON.stringify(closeRatioData.slice(0, 3)));
+                console.log('DEBUG: Close ratio curve length:', chartData.close_ratio_curve ? chartData.close_ratio_curve.length : 0);
+                console.log('DEBUG: Retention ratio curve length:', chartData.retention_ratio_curve ? chartData.retention_ratio_curve.length : 0);
+                if (chartData.close_ratio_curve && chartData.close_ratio_curve.length > 0) {
+                    console.log('DEBUG: First 3 close curve points:', JSON.stringify(chartData.close_ratio_curve.slice(0, 3)));
+                }
                 
                 var options4 = {
                     series: [
@@ -487,7 +492,7 @@
                     ],
                     chart: {
                         height: 350,
-                        type: 'scatter',
+                        type: 'line',  // Change to 'line' for mixed chart
                         toolbar: { show: true },
                         zoom: { enabled: true, type: 'xy' }
                     },
@@ -522,16 +527,8 @@
                         yaxis: { lines: { show: true } }
                     },
                     markers: {
-                        size: 8,  // Use static size for now
-                        strokeWidth: 1  // Use static stroke width
-                        // size: function(val, opts) {
-                        //     // Dynamic marker size based on product reforms
-                        //     return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].markerSize;
-                        // },
-                        // strokeWidth: function(val, opts) {
-                        //     // Black border for points with product reforms
-                        //     return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].strokeColor === '#000000' ? 2 : 0;
-                        // }
+                        size: [8, 8, 0, 0],  // Size for each series: scatter points 8, lines 0
+                        strokeWidth: [1, 1, 0, 0]  // Stroke width for each series
                     },
                     legend: { 
                         show: true, 
@@ -575,13 +572,6 @@
                 chart4 = new ApexCharts(scatterChartContainer, options4);
                 console.log('DEBUG: Chart 4 created with options:', options4);
                 console.log('DEBUG: Series data lengths - retention:', options4.series[0].data.length, 'close:', options4.series[1].data.length);
-
-                if (chart4) {
-                    chart4.hideSeries('Retention Ratio'); // Hide Retention Ratio by default
-                    chart4.hideSeries('Close Ratio Trend'); // Hide Close Ratio Trend by default
-                    chart4.hideSeries('Retention Ratio Trend'); // Hide Retention Ratio Trend by default
-                    console.log('Retention Ratio and trend lines hidden by default in scatter plot.');
-                }
             } else {
                 console.log('DEBUG: Scatter chart NOT created. Reasons:');
                 console.log('  - scatterChartContainer:', scatterChartContainer ? 'exists' : 'missing');
@@ -619,7 +609,9 @@
                         // chart3.hideSeries('SeriesNameToHideByDefault'); // If any series in chart3 needs to be hidden by default
                         if (chart4) {
                             chart4.hideSeries('Retention Ratio'); // Hide Retention Ratio by default
-                            console.log('Retention Ratio series hidden by default in scatter plot.');
+                            chart4.hideSeries('Close Ratio Trend'); // Hide Close Ratio Trend by default
+                            chart4.hideSeries('Retention Ratio Trend'); // Hide Retention Ratio Trend by default
+                            console.log('Retention Ratio and trend lines hidden by default in scatter plot.');
                         }
                         console.log('Sales and Cancellations (Chart 2) series hidden by default.');
                     } catch (e) {

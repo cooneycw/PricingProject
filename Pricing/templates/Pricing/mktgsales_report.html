@@ -42,6 +42,34 @@
                             <div id="activityChart" style="{{ initial_chart_style|default:'display: none' }};"></div>
                             <div id="financialRatioChart" style="{{ initial_chart_style|default:'display: none' }}; margin-top: 20px;"></div>
                             <div id="ratiosChart" style="{{ initial_chart_style|default:'display: none' }}; margin-top: 20px;"></div>
+                            
+                            <!-- Color Guide -->
+                            <div id="colorGuide" style="{{ initial_chart_style|default:'display: none' }}; margin: 20px 0; padding: 15px; border: 1px solid #eee; border-radius: 8px; background: #fafafa;">
+                                <div style="font-weight: bold; margin-bottom: 10px;">Industry Health Indicators:</div>
+                                <div style="display: flex; gap: 15px; align-items: center;">
+                                    <div style="display: flex; align-items: center;">
+                                        <span style="display: inline-block; width: 20px; height: 20px; background: #00E396; border-radius: 50%; margin-right: 8px;"></span>
+                                        <span>Healthy</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center;">
+                                        <span style="display: inline-block; width: 20px; height: 20px; background: #FEB019; border-radius: 50%; margin-right: 8px;"></span>
+                                        <span>Caution</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center;">
+                                        <span style="display: inline-block; width: 20px; height: 20px; background: #FF6347; border-radius: 50%; margin-right: 8px;"></span>
+                                        <span>Warning</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center;">
+                                        <span style="display: inline-block; width: 20px; height: 20px; background: #FF4560; border-radius: 50%; margin-right: 8px;"></span>
+                                        <span>Critical</span>
+                                    </div>
+                                    <div style="margin-left: 20px; display: flex; align-items: center;">
+                                        <span style="display: inline-block; width: 24px; height: 24px; background: #ccc; border: 2px solid #000; border-radius: 50%; margin-right: 8px;"></span>
+                                        <span>Product Reform Year</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <div id="scatterChart" style="{{ initial_chart_style|default:'display: none' }}; margin-top: 20px;"></div>
                         </div>
 
@@ -447,7 +475,11 @@
                         fillColor: pointColor,
                         strokeColor: point.product_reforms ? '#000000' : pointColor,
                         markerSize: point.product_reforms ? 12 : 8,
-                        strokeWidth: point.product_reforms ? 2 : 0
+                        strokeWidth: point.product_reforms ? 2 : 0,
+                        // Include metadata for tooltip
+                        year: point.year,
+                        osfi_interventions: point.osfi_interventions,
+                        product_reforms: point.product_reforms
                     };
                     
                     closeRatioData.push(scatterPoint);
@@ -458,7 +490,11 @@
                         fillColor: pointColor,
                         strokeColor: point.product_reforms ? '#000000' : pointColor,
                         markerSize: point.product_reforms ? 12 : 8,
-                        strokeWidth: point.product_reforms ? 2 : 0
+                        strokeWidth: point.product_reforms ? 2 : 0,
+                        // Include metadata for tooltip
+                        year: point.year,
+                        osfi_interventions: point.osfi_interventions,
+                        product_reforms: point.product_reforms
                     });
                 });
                 
@@ -562,15 +598,15 @@
                     tooltip: {
                         custom: function({ series, seriesIndex, dataPointIndex, w }) {
                             const point = w.config.series[seriesIndex].data[dataPointIndex];
-                            const seriesName = w.config.series[seriesIndex].name;
+                            const seriesName = w.globals.seriesNames[seriesIndex];
                             
-                            let tooltipHtml = '<div class="apexcharts-tooltip-box" style="padding: 10px;">';
-                            tooltipHtml += '<div><strong>Year: ' + point.year + '</strong></div>';
-                            tooltipHtml += '<div>Rate Increase: ' + point.x.toFixed(1) + '%</div>';
+                            let tooltipHtml = '<div style="padding: 10px; font-size: 12px;">';
+                            tooltipHtml += '<div>Year: ' + (point.year || 'N/A') + '</div>';
+                            tooltipHtml += '<div>Profit + Marketing: ' + point.x.toFixed(1) + '%</div>';
                             tooltipHtml += '<div>' + seriesName + ': ' + point.y.toFixed(1) + '%</div>';
                             tooltipHtml += '<div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ddd;">';
-                            tooltipHtml += '<div>OSFI Interventions (Prior Year): ' + point.osfi + '</div>';
-                            tooltipHtml += '<div>Product Reforms (Prior Year): ' + (point.reforms ? point.reforms : 'None') + '</div>';
+                            tooltipHtml += '<div>Industry MCT Failures: ' + (point.osfi_interventions || 0) + '</div>';
+                            tooltipHtml += '<div>Product Reforms: ' + (point.product_reforms ? point.product_reforms : 'None') + '</div>';
                             tooltipHtml += '</div></div>';
                             
                             return tooltipHtml;
@@ -582,11 +618,11 @@
                 const legendContainer = document.createElement('div');
                 legendContainer.style.cssText = 'margin-top: 10px; font-size: 12px; display: flex; gap: 20px; flex-wrap: wrap;';
                 legendContainer.innerHTML = `
-                    <div><strong>OSFI Interventions:</strong></div>
-                    <div><span style="display:inline-block;width:12px;height:12px;background:#00E396;border-radius:50%;"></span> None</div>
+                    <div><strong>Industry MCT Failures:</strong></div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#00E396;border-radius:50%;"></span> 0 (None)</div>
                     <div><span style="display:inline-block;width:12px;height:12px;background:#FEB019;border-radius:50%;"></span> 1</div>
-                    <div><span style="display:inline-block;width:12px;height:12px;background:#FF6600;border-radius:50%;"></span> 2</div>
-                    <div><span style="display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;"></span> 3+</div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#FF6347;border-radius:50%;"></span> 2</div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#FF4560;border-radius:50%;"></span> 3+</div>
                     <div style="margin-left: 20px;"><strong>Product Reforms:</strong></div>
                     <div><span style="display:inline-block;width:12px;height:12px;background:#ccc;border:2px solid #000;border-radius:50%;"></span> BI/CL/Both (larger)</div>
                 `;
@@ -611,14 +647,16 @@
                     if (tableContainer) tableContainer.style.display = 'none';
                     if (activityChartContainer) activityChartContainer.style.display = 'block';
                     if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'block';
-                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'block'; // Show new chart
-                    if (scatterChartContainer) scatterChartContainer.style.display = 'block'; // Show scatter chart
+                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'block';
+                    if (scatterChartContainer) scatterChartContainer.style.display = 'block';
+                    if (document.getElementById('colorGuide')) document.getElementById('colorGuide').style.display = 'block';
                 } else {
                     if (tableContainer) tableContainer.style.display = 'block';
                     if (activityChartContainer) activityChartContainer.style.display = 'none';
                     if (financialRatioChartContainer) financialRatioChartContainer.style.display = 'none';
-                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'none'; // Hide new chart
-                    if (scatterChartContainer) scatterChartContainer.style.display = 'none'; // Hide scatter chart
+                    if (ratiosChartContainer) ratiosChartContainer.style.display = 'none';
+                    if (scatterChartContainer) scatterChartContainer.style.display = 'none';
+                    if (document.getElementById('colorGuide')) document.getElementById('colorGuide').style.display = 'none';
                 }
                 setButtonState(showCharts);
             }

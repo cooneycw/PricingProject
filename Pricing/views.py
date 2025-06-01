@@ -766,12 +766,18 @@ def mktgsales_report(request, game_id):
                 }
                 
                 # --- SCATTER PLOT DATA PREPARATION ---
-                # Calculate rate increases and prepare scatter plot data
+                # Create scatter plot data with profit_margin + marketing_expense decisions
                 scatter_data = []
                 
                 # Get OSFI intervention counts and product reform data
                 industry_data = Industry.objects.filter(game_id=game)
                 claim_trends_data = ClaimTrends.objects.filter(game_id=game)
+                
+                # Get user's decisions data
+                user_decisions = Decisions.objects.filter(
+                    game_id=game,
+                    player_id=user
+                ).order_by('year')
                 
                 # Create a dictionary for OSFI intervention counts by year
                 osfi_intervention_counts = {}
@@ -802,114 +808,103 @@ def mktgsales_report(request, game_id):
                     except:
                         product_reforms[ct.year] = None
                 
-                # Calculate rate increases and align with next year's ratios
+                # Calculate combined expense (profit_margin + marketing_expense) and align with current year's ratios
                 years_sorted = sorted(chart_df['year'].unique())
                 
-                for i in range(len(years_sorted) - 1):
-                    curr_year = years_sorted[i]
-                    next_year = years_sorted[i + 1]
+                for curr_year in years_sorted:
+                    # Get decision data for current year
+                    decision = user_decisions.filter(year=curr_year).first()
                     
-                    # Get current and previous year data
-                    curr_data = chart_df[chart_df['year'] == curr_year].iloc[0]
-                    next_data = chart_df[chart_df['year'] == next_year].iloc[0]
-                    
-                    # Calculate rate increase (percentage change in average premium)
-                    if i > 0:
-                        prev_year = years_sorted[i - 1]
-                        prev_data = chart_df[chart_df['year'] == prev_year].iloc[0]
-                        prev_premium = float(prev_data['avg_prem'])
-                        curr_premium = float(curr_data['avg_prem'])
+                    if decision:
+                        # Calculate profit_margin + marketing_expense (both stored as integers representing tenths)
+                        profit_margin = decision.sel_profit_margin / 10.0  # Convert to percentage
+                        marketing_expense = decision.sel_exp_ratio_mktg / 10.0  # Convert to percentage
+                        combined_expense = profit_margin + marketing_expense
                         
-                        if prev_premium > 0:
-                            rate_increase = ((curr_premium - prev_premium) / prev_premium) * 100
-                        else:
-                            rate_increase = 0
+                        # Get current year's retention and close ratios
+                        curr_data = chart_df[chart_df['year'] == curr_year].iloc[0]
                         
-                        # Get next year's retention and close ratios
-                        next_customers = float(next_data['end_in_force'])
-                        next_canx = float(next_data['canx'])
-                        next_quotes = float(next_data['quotes'])
-                        next_sales = float(next_data['sales'])
+                        curr_customers = float(curr_data['end_in_force'])
+                        curr_canx = float(curr_data['canx'])
+                        curr_quotes = float(curr_data['quotes'])
+                        curr_sales = float(curr_data['sales'])
                         
-                        # Calculate retention ratio for next year
-                        if next_customers > 0:
-                            retention_ratio = ((next_customers - next_canx) / next_customers) * 100
+                        # Calculate retention ratio for current year
+                        if curr_customers > 0:
+                            retention_ratio = ((curr_customers - curr_canx) / curr_customers) * 100
                         else:
                             retention_ratio = 0
                         
-                        # Calculate close ratio for next year
-                        if next_quotes > 0:
-                            close_ratio = (next_sales / next_quotes) * 100
+                        # Calculate close ratio for current year
+                        if curr_quotes > 0:
+                            close_ratio = (curr_sales / curr_quotes) * 100
                         else:
                             close_ratio = 0
                         
-                        # Get OSFI interventions from PRIOR year (affects current year's rates)
-                        osfi_count = osfi_intervention_counts.get(prev_year, 0)
+                        # Get OSFI interventions from current year
+                        osfi_count = osfi_intervention_counts.get(curr_year, 0)
                         
-                        # Get product reforms from PRIOR year
-                        reform_type = product_reforms.get(prev_year, None)
+                        # Get product reforms from current year
+                        reform_type = product_reforms.get(curr_year, None)
                         
                         scatter_data.append({
                             'year': int(curr_year),  # Convert numpy.int64 to Python int
-                            'rate_increase': round(rate_increase, 2),
+                            'combined_expense': round(combined_expense, 1),
                             'retention_ratio': round(retention_ratio, 2),
                             'close_ratio': round(close_ratio, 2),
                             'osfi_interventions': int(osfi_count),  # Convert to int in case it's numpy type
                             'product_reforms': reform_type  # Pass reform type as string
                         })
-                    else:
-                        pass  # Skipping first year (need previous year for rate calculation)
-                
-                # Calculate logistic regression curves if we have scatter data
-                close_ratio_curve = []
-                retention_ratio_curve = []
-                
-                if len(scatter_data) > 3:  # Need at least 4 points for meaningful regression
-                    try:
-                        # Extract X (rate increases) and Y values for both ratios
-                        X = np.array([point['rate_increase'] for point in scatter_data])
-                        y_close = np.array([point['close_ratio'] for point in scatter_data])
-                        y_retention = np.array([point['retention_ratio'] for point in scatter_data])
-                        
-                        # Fit polynomial regression (degree 2)
-                        close_poly = np.polyfit(X, y_close, 2)
-                        retention_poly = np.polyfit(X, y_retention, 2)
-                        
-                        # Generate smooth curve points
-                        x_range = np.linspace(X.min(), X.max(), 50)
-                        
-                        # Calculate polynomial values
-                        close_curve_values = np.polyval(close_poly, x_range)
-                        retention_curve_values = np.polyval(retention_poly, x_range)
-                        
-                        # Create curve data for chart
-                        for i in range(len(x_range)):
-                            close_ratio_curve.append({
-                                'x': float(round(x_range[i], 2)),
-                                'y': float(round(close_curve_values[i], 2))
-                            })
-                            retention_ratio_curve.append({
-                                'x': float(round(x_range[i], 2)),
-                                'y': float(round(retention_curve_values[i], 2))
-                            })
-                    except Exception as e:
-                        print(f"Regression failed: {e}")
-                        pass
-                
-                print(f"DEBUG: Close ratio curve points: {len(close_ratio_curve)}")
-                print(f"DEBUG: Retention ratio curve points: {len(retention_ratio_curve)}")
-                
-                chart_data['scatter_data'] = scatter_data
-                chart_data['close_ratio_curve'] = close_ratio_curve
-                chart_data['retention_ratio_curve'] = retention_ratio_curve
-            else:
-                chart_data = None # Explicitly set to None if no chart data
 
-            # print(f"DEBUG chart_data: {chart_data}")
-            print(f"DEBUG: Final chart_data keys: {list(chart_data.keys()) if chart_data else 'None'}")
-            if chart_data and 'scatter_data' in chart_data:
-                print(f"DEBUG: scatter_data in chart_data has {len(chart_data['scatter_data'])} points")
+            # Calculate logistic regression curves if we have scatter data
+            close_ratio_curve = []
+            retention_ratio_curve = []
+            
+            if len(scatter_data) > 3:  # Need at least 4 points for meaningful regression
+                try:
+                    # Extract X (combined expense) and Y values for both ratios
+                    X = np.array([point['combined_expense'] for point in scatter_data])
+                    y_close = np.array([point['close_ratio'] for point in scatter_data])
+                    y_retention = np.array([point['retention_ratio'] for point in scatter_data])
+                    
+                    # Fit polynomial regression (degree 2)
+                    close_poly = np.polyfit(X, y_close, 2)
+                    retention_poly = np.polyfit(X, y_retention, 2)
+                    
+                    # Generate smooth curve points
+                    x_range = np.linspace(X.min(), X.max(), 50)
+                    
+                    # Calculate polynomial values
+                    close_curve_values = np.polyval(close_poly, x_range)
+                    retention_curve_values = np.polyval(retention_poly, x_range)
+                    
+                    # Create curve data for chart
+                    for i in range(len(x_range)):
+                        close_ratio_curve.append({
+                            'x': float(round(x_range[i], 2)),
+                            'y': float(round(close_curve_values[i], 2))
+                        })
+                        retention_ratio_curve.append({
+                            'x': float(round(x_range[i], 2)),
+                            'y': float(round(retention_curve_values[i], 2))
+                        })
+                except Exception as e:
+                    print(f"Regression failed: {e}")
+                    pass
+            
+            print(f"DEBUG: Close ratio curve points: {len(close_ratio_curve)}")
+            print(f"DEBUG: Retention ratio curve points: {len(retention_ratio_curve)}")
+            
+            chart_data['scatter_data'] = scatter_data
+            chart_data['close_ratio_curve'] = close_ratio_curve
+            chart_data['retention_ratio_curve'] = retention_ratio_curve
+        else:
+            chart_data = None # Explicitly set to None if no chart data
 
+        # print(f"DEBUG chart_data: {chart_data}")
+        print(f"DEBUG: Final chart_data keys: {list(chart_data.keys()) if chart_data else 'None'}")
+        if chart_data and 'scatter_data' in chart_data:
+            print(f"DEBUG: scatter_data in chart_data has {len(chart_data['scatter_data'])} points")
         else:
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'
     else:

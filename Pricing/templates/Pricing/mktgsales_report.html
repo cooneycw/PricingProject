@@ -429,40 +429,36 @@
                 const retentionData = [];
                 const closeRatioData = [];
                 
-                // Color scale for OSFI interventions (0=green, 1=yellow, 2=orange, 3+=red)
-                const osfiColorScale = ['#00E396', '#FEB019', '#FF6600', '#FF0000'];
+                // Color coding based on OSFI interventions
+                const getColor = (interventions) => {
+                    if (interventions === 0) return '#00E396'; // Green
+                    if (interventions === 1) return '#FEB019'; // Yellow
+                    if (interventions === 2) return '#FF6347'; // Orange
+                    return '#FF4560'; // Red for 3+
+                };
                 
                 chartData.scatter_data.forEach(point => {
-                    // Determine color based on OSFI interventions
-                    let colorIndex = Math.min(point.osfi_interventions, 3);
-                    let pointColor = osfiColorScale[colorIndex];
+                    // Use the color function directly with OSFI interventions
+                    const pointColor = getColor(point.osfi_interventions);
                     
-                    // Determine marker size based on product reforms (base size 6, +4 if reform)
-                    let markerSize = point.product_reforms ? 10 : 6;
+                    const scatterPoint = {
+                        x: point.combined_expense, // Changed from rate_increase
+                        y: point.close_ratio,
+                        fillColor: pointColor,
+                        strokeColor: point.product_reforms ? '#000000' : pointColor,
+                        markerSize: point.product_reforms ? 12 : 8,
+                        strokeWidth: point.product_reforms ? 2 : 0
+                    };
                     
-                    // Data point objects for ApexCharts scatter
+                    closeRatioData.push(scatterPoint);
+                    
                     retentionData.push({
-                        x: Number(point.rate_increase),
-                        y: Number(point.retention_ratio),
-                        // fillColor: pointColor,
-                        // strokeColor: point.product_reforms ? '#000000' : pointColor,
-                        // Store metadata for tooltip
-                        year: point.year,
-                        osfi: point.osfi_interventions,
-                        reforms: point.product_reforms,
-                        markerSize: markerSize
-                    });
-                    
-                    closeRatioData.push({
-                        x: Number(point.rate_increase),
-                        y: Number(point.close_ratio),
-                        // fillColor: pointColor,
-                        // strokeColor: point.product_reforms ? '#000000' : pointColor,
-                        // Store metadata for tooltip
-                        year: point.year,
-                        osfi: point.osfi_interventions,
-                        reforms: point.product_reforms,
-                        markerSize: markerSize
+                        x: point.combined_expense, // Changed from rate_increase
+                        y: point.retention_ratio,
+                        fillColor: pointColor,
+                        strokeColor: point.product_reforms ? '#000000' : pointColor,
+                        markerSize: point.product_reforms ? 12 : 8,
+                        strokeWidth: point.product_reforms ? 2 : 0
                     });
                 });
                 
@@ -526,17 +522,14 @@
                         dashArray: [0, 0, 0, 0]  // No dashes
                     },
                     colors: ['#FF4560', '#00E396', '#FF4560', '#00E396'], // Red for close, green for retention
-                    title: { text: 'Rate Increase Impact on Close & Retention Ratios' },
+                    title: { text: 'Impact of Profit Margin + Marketing Expense on Close & Retention Ratios' },
                     xaxis: {
-                        title: { text: 'Rate Increase (%)' },
-                        min: -10,  // Allow for negative rate increases
-                        max: 15,   // Allow up to 15% rate increases
-                        tickAmount: 10,
-                        labels: {
-                            formatter: function(val) {
-                                return val !== undefined && val !== null ? val.toFixed(1) + '%' : '';
-                            }
-                        }
+                        title: { text: 'Profit Margin + Marketing Expense (%)' },
+                        type: 'numeric',
+                        min: 0,  // Start from 0% 
+                        max: 30, // Up to 30% for combined expense
+                        labels: { formatter: val => val.toFixed(1) + '%' },
+                        tickAmount: 6 // Show ticks at 0, 6, 12, 18, 24, 30
                     },
                     yaxis: {
                         title: { text: 'Ratio (%)' },

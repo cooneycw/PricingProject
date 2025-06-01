@@ -785,6 +785,9 @@ def mktgsales_report(request, game_id):
                     # Count capital test failures in the industry for each year
                     failures = industry_data.filter(year=year, capital_test='Fail').count()
                     osfi_intervention_counts[year] = failures
+                    print(f"DEBUG: Year {year} - Industry MCT failures: {failures}")
+                
+                print(f"DEBUG: OSFI intervention counts by year: {osfi_intervention_counts}")
                 
                 # Get product reform data
                 product_reforms = {}
@@ -855,6 +858,8 @@ def mktgsales_report(request, game_id):
                             'osfi_interventions': int(osfi_count),  # Convert to int in case it's numpy type
                             'product_reforms': reform_type  # Pass reform type as string
                         })
+                        
+                        print(f"DEBUG: Year {curr_year} - OSFI interventions: {osfi_count}, Combined expense: {combined_expense:.1f}%")
 
             # Calculate logistic regression curves if we have scatter data
             close_ratio_curve = []
@@ -898,6 +903,10 @@ def mktgsales_report(request, game_id):
             chart_data['scatter_data'] = scatter_data
             chart_data['close_ratio_curve'] = close_ratio_curve
             chart_data['retention_ratio_curve'] = retention_ratio_curve
+            
+            print(f"DEBUG: Final scatter_data sent to template:")
+            for point in scatter_data:
+                print(f"  Year {point['year']}: osfi_interventions={point['osfi_interventions']}")
         else:
             chart_data = None # Explicitly set to None if no chart data
 

@@ -1066,10 +1066,15 @@ def financials_report(request, game_id):
             # Fill missing values with 0 for charting
             chart_df['written_premium'] = pd.to_numeric(chart_df['written_premium'], errors='coerce').fillna(0)
             chart_df['capital'] = pd.to_numeric(chart_df['capital'], errors='coerce').fillna(0)
+            chart_df['profit'] = pd.to_numeric(chart_df['profit'], errors='coerce').fillna(0)
+            chart_df['dividend_paid'] = pd.to_numeric(chart_df['dividend_paid'], errors='coerce').fillna(0)
             chart_data = {
                 'years': chart_df['year'].tolist(),
                 'written_premium': chart_df['written_premium'].tolist(),
                 'capital': chart_df['capital'].tolist(),
+                'profitability': chart_df['profit'].tolist(),
+                'dividends': chart_df['dividend_paid'].tolist(),
+                'mct_test': chart_df['capital_test'].tolist()
             }
         # ... existing code ...
         if not df.empty:

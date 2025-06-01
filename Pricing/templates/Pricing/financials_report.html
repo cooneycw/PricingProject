@@ -65,7 +65,7 @@
         // Toggle and Chart Logic
         const toggleButton = document.getElementById('toggleViewBtn');
         const tableContainer = document.querySelector('.financial-data-table');
-        const chartContainer = document.getElementById('financialsChart');
+        const financialsChartContainer = document.getElementById('financialsChart');
 
         let isNoviceGame = false;
         try {
@@ -88,10 +88,9 @@
         // Determine current system's latest year
         let currentSystemLatestYear = null;
         if (chartData && chartData.years && chartData.years.length > 0) {
-            // Assuming chartData.years contains numeric year values or strings convertible to numbers
             currentSystemLatestYear = Math.max(...chartData.years.map(y => parseInt(y, 10)).filter(y => !isNaN(y)));
         }
-        if (isNaN(currentSystemLatestYear) || currentSystemLatestYear === null || currentSystemLatestYear === -Infinity) { // Fallback or if chartData.years was empty/invalid
+        if (isNaN(currentSystemLatestYear) || currentSystemLatestYear === null || currentSystemLatestYear === -Infinity) {
             const yearOptions = Array.from(document.querySelectorAll('#year option'))
                                      .map(opt => parseInt(opt.value, 10))
                                      .filter(y => !isNaN(y));
@@ -99,7 +98,6 @@
                 currentSystemLatestYear = Math.max(...yearOptions);
             }
         }
-        // Ensure currentSystemLatestYear is null if no valid year was found
         if (currentSystemLatestYear === -Infinity || isNaN(currentSystemLatestYear)) {
             currentSystemLatestYear = null;
         }
@@ -121,10 +119,10 @@
         function setViewVisibility(showChart) {
             if (showChart) {
                 if (tableContainer) tableContainer.style.display = 'none';
-                if (chartContainer) chartContainer.style.display = 'block';
+                if (financialsChartContainer) financialsChartContainer.style.display = 'block';
             } else {
                 if (tableContainer) tableContainer.style.display = 'block';
-                if (chartContainer) chartContainer.style.display = 'none';
+                if (financialsChartContainer) financialsChartContainer.style.display = 'none';
             }
             setButtonState(showChart);
         }
@@ -136,19 +134,15 @@
             let showChart;
 
             if (currentLatestYearFromSystem !== null && (storedLatestYear === null || currentLatestYearFromSystem > storedLatestYear)) {
-                // New data year detected or first time with year logic for this report
-                showChart = true; // Default to chart
+                showChart = true;
                 localStorage.setItem('financialsView', 'chart');
                 localStorage.setItem('financialsLatestYear', currentLatestYearFromSystem.toString());
             } else if (storedViewPref) {
-                // Use existing preference as no new year forces a change
                 showChart = (storedViewPref === 'chart');
-                // If storedLatestYear was somehow not set but viewPref was, and we have a current year, set it now
                 if (storedLatestYear === null && currentLatestYearFromSystem !== null) {
                     localStorage.setItem('financialsLatestYear', currentLatestYearFromSystem.toString());
                 }
             } else {
-                // No stored preference, and no new year forcing a change - use novice status
                 showChart = isNoviceUser;
                 localStorage.setItem('financialsView', showChart ? 'chart' : 'table');
                 if (currentLatestYearFromSystem !== null) {
@@ -160,45 +154,110 @@
 
         let showChartsInitialState = getAndManageStoredFinancialsView(currentSystemLatestYear, isNoviceGame);
 
-        if (tableContainer && chartContainer && toggleButton) {
+        if (tableContainer && financialsChartContainer && toggleButton) {
             setViewVisibility(showChartsInitialState);
         }
 
         if (chartData && chartData.years && chartData.years.length > 0) {
-            var options = {
+            const commonXAxis = {
+                categories: chartData.years,
+                title: { text: 'Year' },
+                labels: { style: { fontSize: '12px' } },
+                axisBorder: { show: true },
+                axisTicks: { show: true }
+            };
+            
+            const commonGrid = {
+                padding: { left: 10, right: 10 }
+            };
+
+            // Helper function to calculate Y-axis max with padding
+            function getAxisMax(dataArray, paddingPercent = 0.1) {
+                if (!dataArray || dataArray.length === 0) return undefined; 
+                const numericArray = dataArray.map(val => Number(val)).filter(val => !isNaN(val));
+                if (numericArray.length === 0) return undefined;
+                const maxVal = Math.max(...numericArray);
+                return maxVal * (1 + paddingPercent);
+            }
+
+            // Calculate max values for Y-axes
+            const writtenPremiumMax = getAxisMax(chartData.written_premium || []);
+            const capitalProfitDividendMax = getAxisMax([...(chartData.capital || []), ...(chartData.profitability || []), ...(chartData.dividends || [])]);
+
+            // Prepare MCT test failure annotations
+            const mctAnnotations = [];
+            if (chartData.mct_test && chartData.years) {
+                chartData.years.forEach((year, index) => {
+                    // Check if MCT test failed (assuming 'Fail' or similar string, or false boolean)
+                    const mctResult = chartData.mct_test[index];
+                    const isFail = mctResult === 'Fail' || mctResult === 'fail' || mctResult === false || mctResult === 'False';
+                    
+                    if (isFail) {
+                        mctAnnotations.push({
+                            x: year,
+                            borderColor: '#FF0000',
+                            label: {
+                                borderColor: '#FF0000',
+                                style: {
+                                    color: '#fff',
+                                    background: '#FF0000',
+                                    fontSize: '10px'
+                                },
+                                text: 'MCT Fail',
+                                orientation: 'horizontal',
+                                offsetY: -10,
+                                position: 'top'
+                            }
+                        });
+                    }
+                });
+            }
+
+            var optionsFinancials = {
                 series: [
                     { name: 'Written Premium', type: 'line', data: chartData.written_premium },
-                    { name: 'Capital', type: 'line', data: chartData.capital }
+                    { name: 'Capital', type: 'line', data: chartData.capital },
+                    { name: 'Profitability', type: 'column', data: chartData.profitability },
+                    { name: 'Dividends', type: 'column', data: chartData.dividends }
                 ],
                 chart: {
-                    height: 350,
+                    height: 400,
                     type: 'line',
                     toolbar: { show: true }
                 },
-                colors: ['#008FFB', '#00E396'],
-                stroke: { width: [3, 3], curve: 'smooth' },
-                title: { text: 'Written Premium vs Capital (Last 20 Years)' },
-                xaxis: {
-                    categories: chartData.years,
-                    title: { text: 'Year' }
+                colors: ['#008FFB', '#00E396', '#FF4560', '#FEB019'],
+                stroke: { width: [3, 3, 0, 0], curve: 'smooth' },
+                plotOptions: {
+                    bar: {
+                        columnWidth: '50%',
+                        endingShape: 'rounded'
+                    }
                 },
+                title: { text: 'Financial Overview - Premium, Capital, Profitability & Dividends' },
+                xaxis: commonXAxis,
+                grid: commonGrid,
                 yaxis: [
                     {
                         seriesName: 'Written Premium',
-                        title: { text: 'Written Premium' },
-                        labels: { formatter: function (value) { return "$" + Math.round(value).toLocaleString(); } },
+                        title: { text: 'Written Premium ($)' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? "$" + Math.round(value).toLocaleString() : ''; } },
                         tickAmount: 5,
-                        min: 0
+                        min: 0,
+                        max: writtenPremiumMax
                     },
                     {
-                        seriesName: 'Capital',
+                        seriesName: ['Capital', 'Profitability', 'Dividends'],
                         opposite: true,
-                        title: { text: 'Capital' },
-                        labels: { formatter: function (value) { return "$" + Math.round(value).toLocaleString(); } },
+                        title: { text: 'Capital, Profitability & Dividends ($)' },
+                        labels: { formatter: function (value) { return value !== undefined && value !== null ? "$" + Math.round(value).toLocaleString() : ''; } },
                         tickAmount: 5,
-                        min: 0
+                        min: 0,
+                        max: capitalProfitDividendMax
                     }
                 ],
+                annotations: {
+                    xaxis: mctAnnotations
+                },
                 legend: { show: true, position: 'bottom', horizontalAlign: 'center' },
                 tooltip: {
                     shared: true, intersect: false,
@@ -210,16 +269,26 @@
                     }
                 }
             };
-            var chart = new ApexCharts(chartContainer, options);
-            chart.render();
+
+            var financialsChart = null;
+            if (financialsChartContainer) {
+                financialsChart = new ApexCharts(financialsChartContainer, optionsFinancials);
+                financialsChart.render().then(() => {
+                    console.log('Financial chart rendered successfully.');
+                }).catch(err => {
+                    console.error('Chart failed to render:', err);
+                    if (toggleButton) toggleButton.style.display = 'none';
+                    if (financialsChartContainer) financialsChartContainer.style.display = 'none';
+                });
+            }
         } else {
             if (toggleButton) toggleButton.style.display = 'none';
-            if (chartContainer) chartContainer.style.display = 'none';
+            if (financialsChartContainer) financialsChartContainer.style.display = 'none';
         }
 
         if (toggleButton) {
             toggleButton.addEventListener('click', function() {
-                const isChartVisible = chartContainer && chartContainer.style.display === 'block';
+                const isChartVisible = financialsChartContainer && financialsChartContainer.style.display === 'block';
                 const newViewIsCharts = !isChartVisible;
                 setViewVisibility(newViewIsCharts);
 

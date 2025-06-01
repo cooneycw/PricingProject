@@ -488,6 +488,25 @@
                 const testCloseData = closeRatioData.slice(0, 5);
                 console.log('DEBUG: Test data:', JSON.stringify(testCloseData));
                 
+                // Create a simple test chart first
+                console.log('Creating minimal test chart...');
+                const testOptions = {
+                    series: [{
+                        name: 'Test Series',
+                        data: [{x: 1, y: 10}, {x: 2, y: 20}, {x: 3, y: 15}, {x: 4, y: 25}, {x: 5, y: 30}]
+                    }],
+                    chart: {
+                        height: 350,
+                        type: 'scatter',
+                    },
+                    xaxis: {
+                        type: 'numeric'
+                    },
+                    yaxis: {
+                        type: 'numeric'
+                    }
+                };
+                
                 var options4 = {
                     series: [
                         { name: 'Close Ratio', type: 'scatter', data: closeRatioData },
@@ -583,6 +602,10 @@
                 chart4 = new ApexCharts(scatterChartContainer, options4);
                 console.log('DEBUG: Chart 4 created with options:', options4);
                 console.log('DEBUG: Series data lengths - retention:', options4.series[0].data.length, 'close:', options4.series[1].data.length);
+                
+                // Try creating test chart temporarily
+                // const testChart = new ApexCharts(scatterChartContainer, testOptions);
+                // testChart.render().then(() => console.log('Test chart rendered successfully'));
             } else {
                 console.log('DEBUG: Scatter chart NOT created. Reasons:');
                 console.log('  - scatterChartContainer:', scatterChartContainer ? 'exists' : 'missing');

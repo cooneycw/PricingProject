@@ -171,7 +171,18 @@
 
             const commonXAxis = {
                 categories: chartData.years,
-                title: { text: 'Year' }
+                title: { text: 'Year' },
+                labels: {
+                    style: {
+                        fontSize: '12px'
+                    }
+                },
+                axisBorder: {
+                    show: true
+                },
+                axisTicks: {
+                    show: true
+                }
             };
             
             const commonChartProps = {
@@ -179,6 +190,14 @@
                 type: 'line',
                 toolbar: { show: true },
                 group: 'mktgSalesCharts' // Synchronization group
+            };
+
+            // Common grid configuration to ensure consistent chart area
+            const commonGrid = {
+                padding: {
+                    left: 10,
+                    right: 10
+                }
             };
 
             // --- Chart 1: Activity Metrics (Customers, Average Premium) ---
@@ -195,6 +214,7 @@
                 stroke: { width: [3, 3/*, 2*/], curve: 'smooth' }, // Removed width for Cancellations
                 title: { text: 'Customer & Financial Overview' },
                 xaxis: commonXAxis,
+                grid: commonGrid,
                 yaxis: [
                     {
                         seriesName: 'Customers',
@@ -255,6 +275,15 @@
                 stroke: { width: [0, 3, 3, 2], curve: 'smooth' },
                 title: { text: 'Marketing & Sales Activity' },
                 xaxis: commonXAxis,
+                grid: commonGrid,
+                plotOptions: {
+                    bar: {
+                        columnWidth: '40%', // Control column width to prevent x-axis expansion
+                        dataLabels: {
+                            position: 'top'
+                        }
+                    }
+                },
                 yaxis: [
                     {
                         seriesName: ['Quotes', 'Sales', 'Cancellations'],
@@ -335,6 +364,7 @@
                 stroke: { width: [3, 2, 2], curve: 'smooth' },
                 title: { text: 'Key Performance Ratios' },
                 xaxis: commonXAxis,
+                grid: commonGrid,
                 yaxis: [
                     {
                         seriesName: 'Average Premium',

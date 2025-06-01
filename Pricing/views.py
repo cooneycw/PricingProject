@@ -788,8 +788,7 @@ def mktgsales_report(request, game_id):
                         trends = ct.claim_trends
                         bi_reform = trends.get('bi_reform', {}).get(str(ct.year), 0)
                         cl_reform = trends.get('cl_reform', {}).get(str(ct.year), 0)
-                        # Count as reform if either BI or CL reform happened
-                        product_reforms[ct.year] = 1 if (bi_reform or cl_reform) else 0
+                        
                         # Determine reform type
                         if bi_reform and cl_reform:
                             reform_type = 'Both'
@@ -809,6 +808,7 @@ def mktgsales_report(request, game_id):
                 # Calculate rate increases and align with next year's ratios
                 years_sorted = sorted(chart_df['year'].unique())
                 print(f"DEBUG years_sorted: {years_sorted}, length: {len(years_sorted)}")
+                print(f"DEBUG: Expected scatter points: {max(0, len(years_sorted) - 2)} (need prev year for rate, next year for ratios)")
                 
                 for i in range(len(years_sorted) - 1):
                     curr_year = years_sorted[i]
@@ -866,6 +866,8 @@ def mktgsales_report(request, game_id):
                         print(f"DEBUG: Added scatter point - year: {curr_year}, rate_increase: {rate_increase:.2f}, "
                               f"retention: {retention_ratio:.2f}, close: {close_ratio:.2f}, "
                               f"osfi: {osfi_count}, reforms: {reform_type}")
+                    else:
+                        print(f"DEBUG: Skipping i={i}, curr_year={curr_year} (need previous year for rate calculation)")
                 
                 chart_data['scatter_data'] = scatter_data
                 print(f"DEBUG: Total scatter_data points: {len(scatter_data)}")

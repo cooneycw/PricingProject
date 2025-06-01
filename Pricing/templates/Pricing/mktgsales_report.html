@@ -443,25 +443,41 @@
                     // Determine marker size based on product reforms (base size 6, +4 if reform)
                     let markerSize = point.product_reforms ? 10 : 6;
                     
-                    // Common properties for both series
-                    const commonProps = {
-                        x: point.rate_increase,
+                    // Data point objects for ApexCharts scatter
+                    retentionData.push({
+                        x: Number(point.rate_increase),
+                        y: Number(point.retention_ratio),
                         fillColor: pointColor,
                         strokeColor: point.product_reforms ? '#000000' : pointColor,
-                        meta: {
-                            year: point.year,
-                            osfi: point.osfi_interventions,
-                            reforms: point.product_reforms
-                        }
-                    };
+                        // Store metadata for tooltip
+                        year: point.year,
+                        osfi: point.osfi_interventions,
+                        reforms: point.product_reforms,
+                        markerSize: markerSize
+                    });
                     
-                    retentionData.push({...commonProps, y: point.retention_ratio, size: markerSize});
-                    closeRatioData.push({...commonProps, y: point.close_ratio, size: markerSize});
+                    closeRatioData.push({
+                        x: Number(point.rate_increase),
+                        y: Number(point.close_ratio),
+                        fillColor: pointColor,
+                        strokeColor: point.product_reforms ? '#000000' : pointColor,
+                        // Store metadata for tooltip
+                        year: point.year,
+                        osfi: point.osfi_interventions,
+                        reforms: point.product_reforms,
+                        markerSize: markerSize
+                    });
                 });
                 
                 console.log('DEBUG: retentionData length:', retentionData.length);
                 console.log('DEBUG: closeRatioData length:', closeRatioData.length);
                 console.log('DEBUG: Sample retention point:', retentionData[0]);
+                console.log('DEBUG: X-axis range in data:', 
+                    'min=', Math.min(...retentionData.map(p => p.x)),
+                    'max=', Math.max(...retentionData.map(p => p.x)));
+                console.log('DEBUG: Y-axis range in retention data:', 
+                    'min=', Math.min(...retentionData.map(p => p.y)),
+                    'max=', Math.max(...retentionData.map(p => p.y)));
                 
                 var options4 = {
                     series: [
@@ -477,6 +493,9 @@
                     title: { text: 'Rate Increase Impact on Retention & Close Ratios' },
                     xaxis: {
                         title: { text: 'Rate Increase (%)' },
+                        min: -10,  // Allow for negative rate increases
+                        max: 15,   // Allow up to 15% rate increases
+                        tickAmount: 10,
                         labels: {
                             formatter: function(val) {
                                 return val !== undefined && val !== null ? val.toFixed(1) + '%' : '';
@@ -500,11 +519,11 @@
                     markers: {
                         size: function(val, opts) {
                             // Dynamic marker size based on product reforms
-                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].size;
+                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].markerSize;
                         },
                         strokeWidth: function(val, opts) {
                             // Black border for points with product reforms
-                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].meta.reforms ? 2 : 0;
+                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].strokeColor === '#000000' ? 2 : 0;
                         }
                     },
                     legend: { 
@@ -519,12 +538,12 @@
                             const seriesName = w.config.series[seriesIndex].name;
                             
                             let tooltipHtml = '<div class="apexcharts-tooltip-box" style="padding: 10px;">';
-                            tooltipHtml += '<div><strong>Year: ' + point.meta.year + '</strong></div>';
+                            tooltipHtml += '<div><strong>Year: ' + point.year + '</strong></div>';
                             tooltipHtml += '<div>Rate Increase: ' + point.x.toFixed(1) + '%</div>';
                             tooltipHtml += '<div>' + seriesName + ': ' + point.y.toFixed(1) + '%</div>';
                             tooltipHtml += '<div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ddd;">';
-                            tooltipHtml += '<div>OSFI Interventions (Prior Year): ' + point.meta.osfi + '</div>';
-                            tooltipHtml += '<div>Product Reforms (Prior Year): ' + (point.meta.reforms ? point.meta.reforms : 'None') + '</div>';
+                            tooltipHtml += '<div>OSFI Interventions (Prior Year): ' + point.osfi + '</div>';
+                            tooltipHtml += '<div>Product Reforms (Prior Year): ' + (point.reforms ? point.reforms : 'None') + '</div>';
                             tooltipHtml += '</div></div>';
                             
                             return tooltipHtml;

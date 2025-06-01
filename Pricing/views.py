@@ -789,8 +789,19 @@ def mktgsales_report(request, game_id):
                         cl_reform = trends.get('cl_reform', {}).get(str(ct.year), 0)
                         # Count as reform if either BI or CL reform happened
                         product_reforms[ct.year] = 1 if (bi_reform or cl_reform) else 0
+                        # Determine reform type
+                        if bi_reform and cl_reform:
+                            reform_type = 'Both'
+                        elif bi_reform:
+                            reform_type = 'BI'  
+                        elif cl_reform:
+                            reform_type = 'CL'
+                        else:
+                            reform_type = None
+                        
+                        product_reforms[ct.year] = reform_type
                     except:
-                        product_reforms[ct.year] = 0
+                        product_reforms[ct.year] = None
                 
                 # Calculate rate increases and align with next year's ratios
                 years_sorted = sorted(chart_df['year'].unique())
@@ -836,18 +847,22 @@ def mktgsales_report(request, game_id):
                         osfi_count = osfi_intervention_counts.get(prev_year, 0)
                         
                         # Get product reforms from PRIOR year
-                        reform_count = product_reforms.get(prev_year, 0)
+                        reform_type = product_reforms.get(prev_year, None)
                         
                         scatter_data.append({
-                            'year': curr_year,  # Year of rate change
+                            'year': int(curr_year),  # Convert numpy.int64 to Python int
                             'rate_increase': round(rate_increase, 2),
                             'retention_ratio': round(retention_ratio, 2),
                             'close_ratio': round(close_ratio, 2),
-                            'osfi_interventions': osfi_count,
-                            'product_reforms': reform_count
+                            'osfi_interventions': int(osfi_count),  # Convert to int in case it's numpy type
+                            'product_reforms': reform_type  # Pass reform type as string
                         })
                 
                 chart_data['scatter_data'] = scatter_data
+                # Debug output
+                print(f"DEBUG scatter_data length: {len(scatter_data)}")
+                if len(scatter_data) > 0:
+                    print(f"DEBUG scatter_data sample: {scatter_data[0]}")
             else:
                 chart_data = None # Explicitly set to None if no chart data
 

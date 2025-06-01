@@ -432,13 +432,13 @@
                     let pointColor = osfiColorScale[colorIndex];
                     
                     // Determine marker size based on product reforms (base size 6, +4 if reform)
-                    let markerSize = point.product_reforms > 0 ? 10 : 6;
+                    let markerSize = point.product_reforms ? 10 : 6;
                     
                     // Common properties for both series
                     const commonProps = {
                         x: point.rate_increase,
                         fillColor: pointColor,
-                        strokeColor: point.product_reforms > 0 ? '#000000' : pointColor,
+                        strokeColor: point.product_reforms ? '#000000' : pointColor,
                         meta: {
                             year: point.year,
                             osfi: point.osfi_interventions,
@@ -480,7 +480,7 @@
                     yaxis: {
                         title: { text: 'Ratio (%)' },
                         min: 0,
-                        max: 110,
+                        max: 100,
                         labels: {
                             formatter: function(val) {
                                 return val !== undefined && val !== null ? val.toFixed(0) + '%' : '';
@@ -494,11 +494,11 @@
                     markers: {
                         size: function(val, opts) {
                             // Dynamic marker size based on product reforms
-                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].meta.reforms > 0 ? 10 : 6;
+                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].meta.reforms ? 10 : 6;
                         },
                         strokeWidth: function(val, opts) {
                             // Black border for points with product reforms
-                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].meta.reforms > 0 ? 2 : 0;
+                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].meta.reforms ? 2 : 0;
                         }
                     },
                     legend: { 
@@ -518,7 +518,7 @@
                             tooltipHtml += '<div>' + seriesName + ': ' + point.y.toFixed(1) + '%</div>';
                             tooltipHtml += '<div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ddd;">';
                             tooltipHtml += '<div>OSFI Interventions (Prior Year): ' + point.meta.osfi + '</div>';
-                            tooltipHtml += '<div>Product Reforms (Prior Year): ' + (point.meta.reforms > 0 ? 'Yes' : 'No') + '</div>';
+                            tooltipHtml += '<div>Product Reforms (Prior Year): ' + (point.meta.reforms ? point.meta.reforms : 'None') + '</div>';
                             tooltipHtml += '</div></div>';
                             
                             return tooltipHtml;
@@ -550,7 +550,7 @@
                     <div><span style="display:inline-block;width:12px;height:12px;background:#FF6600;border-radius:50%;"></span> 2</div>
                     <div><span style="display:inline-block;width:12px;height:12px;background:#FF0000;border-radius:50%;"></span> 3+</div>
                     <div style="margin-left: 20px;"><strong>Product Reforms:</strong></div>
-                    <div><span style="display:inline-block;width:12px;height:12px;background:#ccc;border:2px solid #000;border-radius:50%;"></span> Yes (larger marker)</div>
+                    <div><span style="display:inline-block;width:12px;height:12px;background:#ccc;border:2px solid #000;border-radius:50%;"></span> BI/CL/Both (larger)</div>
                 `;
                 scatterChartContainer.appendChild(legendContainer);
                 

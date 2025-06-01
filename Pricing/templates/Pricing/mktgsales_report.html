@@ -483,6 +483,11 @@
                     console.log('DEBUG: First 3 close curve points:', JSON.stringify(chartData.close_ratio_curve.slice(0, 3)));
                 }
                 
+                // Test with simple data first
+                console.log('DEBUG: Testing with first 5 close ratio points only');
+                const testCloseData = closeRatioData.slice(0, 5);
+                console.log('DEBUG: Test data:', JSON.stringify(testCloseData));
+                
                 var options4 = {
                     series: [
                         { name: 'Close Ratio', type: 'scatter', data: closeRatioData },

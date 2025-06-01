@@ -4,8 +4,6 @@ import pytz
 import numpy as np
 import pandas as pd
 import decimal
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import MinMaxScaler
 from .utils import reverse_pv_index, calculate_growth_rate, calculate_avg_profit, calculate_future_value, perform_logistic_regression, perform_logistic_regression_indication
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse, Http404
@@ -866,60 +864,36 @@ def mktgsales_report(request, game_id):
                 close_ratio_curve = []
                 retention_ratio_curve = []
                 
-                if len(scatter_data) > 0:
-                    # Extract X (rate increases) and Y values for both ratios
-                    X = np.array([[point['rate_increase']] for point in scatter_data])
-                    y_close = np.array([point['close_ratio'] for point in scatter_data])
-                    y_retention = np.array([point['retention_ratio'] for point in scatter_data])
-                    
-                    # Scale the Y values to 0-1 range for logistic regression
-                    scaler_close = MinMaxScaler()
-                    scaler_retention = MinMaxScaler()
-                    
-                    y_close_scaled = scaler_close.fit_transform(y_close.reshape(-1, 1)).ravel()
-                    y_retention_scaled = scaler_retention.fit_transform(y_retention.reshape(-1, 1)).ravel()
-                    
-                    # Fit logistic regression models
+                if len(scatter_data) > 3:  # Need at least 4 points for meaningful regression
                     try:
-                        # Close ratio model
-                        lr_close = LogisticRegression(random_state=42, max_iter=1000)
-                        # Convert to binary classification by using median as threshold
-                        y_close_binary = (y_close_scaled > np.median(y_close_scaled)).astype(int)
-                        lr_close.fit(X, y_close_binary)
+                        # Extract X (rate increases) and Y values for both ratios
+                        X = np.array([point['rate_increase'] for point in scatter_data])
+                        y_close = np.array([point['close_ratio'] for point in scatter_data])
+                        y_retention = np.array([point['retention_ratio'] for point in scatter_data])
                         
-                        # Retention ratio model
-                        lr_retention = LogisticRegression(random_state=42, max_iter=1000)
-                        y_retention_binary = (y_retention_scaled > np.median(y_retention_scaled)).astype(int)
-                        lr_retention.fit(X, y_retention_binary)
+                        # Fit polynomial regression (degree 2)
+                        close_poly = np.polyfit(X, y_close, 2)
+                        retention_poly = np.polyfit(X, y_retention, 2)
                         
                         # Generate smooth curve points
-                        x_range = np.linspace(X.min(), X.max(), 100)
-                        X_range = x_range.reshape(-1, 1)
+                        x_range = np.linspace(X.min(), X.max(), 50)
                         
-                        # Get predicted probabilities and scale back to original range
-                        close_probs = lr_close.predict_proba(X_range)[:, 1]
-                        retention_probs = lr_retention.predict_proba(X_range)[:, 1]
-                        
-                        # Scale back to original percentage range
-                        close_scaled = close_probs.reshape(-1, 1)
-                        retention_scaled = retention_probs.reshape(-1, 1)
-                        
-                        close_curve_values = scaler_close.inverse_transform(close_scaled).ravel()
-                        retention_curve_values = scaler_retention.inverse_transform(retention_scaled).ravel()
+                        # Calculate polynomial values
+                        close_curve_values = np.polyval(close_poly, x_range)
+                        retention_curve_values = np.polyval(retention_poly, x_range)
                         
                         # Create curve data for chart
                         for i in range(len(x_range)):
                             close_ratio_curve.append({
-                                'x': round(float(x_range[i]), 2),
-                                'y': round(float(close_curve_values[i]), 2)
+                                'x': float(round(x_range[i], 2)),
+                                'y': float(round(close_curve_values[i], 2))
                             })
                             retention_ratio_curve.append({
-                                'x': round(float(x_range[i]), 2),
-                                'y': round(float(retention_curve_values[i]), 2)
+                                'x': float(round(x_range[i], 2)),
+                                'y': float(round(retention_curve_values[i], 2))
                             })
                     except Exception as e:
-                        # If regression fails, just pass empty curves
-                        print(f"Logistic regression failed: {e}")
+                        print(f"Regression failed: {e}")
                         pass
                 
                 print(f"DEBUG: Close ratio curve points: {len(close_ratio_curve)}")

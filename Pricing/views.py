@@ -863,16 +863,20 @@ def mktgsales_report(request, game_id):
                             'osfi_interventions': int(osfi_count),  # Convert to int in case it's numpy type
                             'product_reforms': reform_type  # Pass reform type as string
                         })
+                        print(f"DEBUG: Added scatter point - year: {curr_year}, rate_increase: {rate_increase:.2f}, "
+                              f"retention: {retention_ratio:.2f}, close: {close_ratio:.2f}, "
+                              f"osfi: {osfi_count}, reforms: {reform_type}")
                 
                 chart_data['scatter_data'] = scatter_data
-                # Debug output
-                print(f"DEBUG scatter_data length: {len(scatter_data)}")
-                if len(scatter_data) > 0:
-                    print(f"DEBUG scatter_data sample: {scatter_data[0]}")
+                print(f"DEBUG: Total scatter_data points: {len(scatter_data)}")
+                print(f"DEBUG: First 2 scatter points: {scatter_data[:2] if scatter_data else 'None'}")
             else:
                 chart_data = None # Explicitly set to None if no chart data
 
             # print(f"DEBUG chart_data: {chart_data}")
+            print(f"DEBUG: Final chart_data keys: {list(chart_data.keys()) if chart_data else 'None'}")
+            if chart_data and 'scatter_data' in chart_data:
+                print(f"DEBUG: scatter_data in chart_data has {len(chart_data['scatter_data'])} points")
 
         else:
             financial_data_table = '<p>No detailed financial data to display for the selected years.</p>'

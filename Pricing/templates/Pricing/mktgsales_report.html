@@ -91,11 +91,13 @@
             console.error('Error parsing is_novice_game:', e);
         }
 
-        let chartData = null;
+        let chartData;
         const chartDataElement = document.getElementById('chartDataJson');
         if (chartDataElement) {
             try {
                 chartData = JSON.parse(chartDataElement.textContent);
+                console.log('DEBUG: Successfully parsed chartData:', chartData);
+                console.log('DEBUG: chartData has scatter_data?', chartData.scatter_data ? 'Yes' : 'No');
             } catch (e) {
                 console.error('Error parsing chart_data from json_script:', e);
                 if (toggleButton) toggleButton.style.display = 'none';
@@ -418,7 +420,14 @@
 
             // --- Chart 4: Rate Impact Scatter Plot ---
             var chart4 = null;
+            console.log('DEBUG: scatterChartContainer exists?', scatterChartContainer ? 'Yes' : 'No');
+            console.log('DEBUG: chartData.scatter_data exists?', chartData && chartData.scatter_data ? 'Yes' : 'No');
+            console.log('DEBUG: scatter_data length:', chartData && chartData.scatter_data ? chartData.scatter_data.length : 0);
+            
             if (scatterChartContainer && chartData.scatter_data && chartData.scatter_data.length > 0) {
+                console.log('DEBUG: scatter_data exists with', chartData.scatter_data.length, 'points');
+                console.log('DEBUG: First scatter point:', chartData.scatter_data[0]);
+                
                 // Prepare data for scatter plot
                 const retentionData = [];
                 const closeRatioData = [];
@@ -446,16 +455,13 @@
                         }
                     };
                     
-                    retentionData.push({
-                        ...commonProps,
-                        y: point.retention_ratio
-                    });
-                    
-                    closeRatioData.push({
-                        ...commonProps,
-                        y: point.close_ratio
-                    });
+                    retentionData.push({...commonProps, y: point.retention_ratio, size: markerSize});
+                    closeRatioData.push({...commonProps, y: point.close_ratio, size: markerSize});
                 });
+                
+                console.log('DEBUG: retentionData length:', retentionData.length);
+                console.log('DEBUG: closeRatioData length:', closeRatioData.length);
+                console.log('DEBUG: Sample retention point:', retentionData[0]);
                 
                 var options4 = {
                     series: [
@@ -494,7 +500,7 @@
                     markers: {
                         size: function(val, opts) {
                             // Dynamic marker size based on product reforms
-                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].meta.reforms ? 10 : 6;
+                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].size;
                         },
                         strokeWidth: function(val, opts) {
                             // Black border for points with product reforms
@@ -555,6 +561,11 @@
                 scatterChartContainer.appendChild(legendContainer);
                 
                 chart4 = new ApexCharts(scatterChartContainer, options4);
+            } else {
+                console.log('DEBUG: Scatter chart NOT created. Reasons:');
+                console.log('  - scatterChartContainer:', scatterChartContainer ? 'exists' : 'missing');
+                console.log('  - chartData.scatter_data:', chartData && chartData.scatter_data ? 'exists' : 'missing');
+                console.log('  - scatter_data length:', chartData && chartData.scatter_data ? chartData.scatter_data.length : 'N/A');
             }
 
             function setViewVisibility(showCharts) {

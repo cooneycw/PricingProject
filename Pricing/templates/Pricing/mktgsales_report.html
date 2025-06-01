@@ -580,6 +580,8 @@
                 scatterChartContainer.appendChild(legendContainer);
                 
                 chart4 = new ApexCharts(scatterChartContainer, options4);
+                console.log('DEBUG: Chart 4 created with options:', options4);
+                console.log('DEBUG: Series data lengths - retention:', options4.series[0].data.length, 'close:', options4.series[1].data.length);
             } else {
                 console.log('DEBUG: Scatter chart NOT created. Reasons:');
                 console.log('  - scatterChartContainer:', scatterChartContainer ? 'exists' : 'missing');

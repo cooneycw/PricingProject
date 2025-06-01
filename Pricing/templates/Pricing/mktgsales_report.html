@@ -447,8 +447,8 @@
                     retentionData.push({
                         x: Number(point.rate_increase),
                         y: Number(point.retention_ratio),
-                        fillColor: pointColor,
-                        strokeColor: point.product_reforms ? '#000000' : pointColor,
+                        // fillColor: pointColor,
+                        // strokeColor: point.product_reforms ? '#000000' : pointColor,
                         // Store metadata for tooltip
                         year: point.year,
                         osfi: point.osfi_interventions,
@@ -459,8 +459,8 @@
                     closeRatioData.push({
                         x: Number(point.rate_increase),
                         y: Number(point.close_ratio),
-                        fillColor: pointColor,
-                        strokeColor: point.product_reforms ? '#000000' : pointColor,
+                        // fillColor: pointColor,
+                        // strokeColor: point.product_reforms ? '#000000' : pointColor,
                         // Store metadata for tooltip
                         year: point.year,
                         osfi: point.osfi_interventions,
@@ -517,14 +517,16 @@
                         yaxis: { lines: { show: true } }
                     },
                     markers: {
-                        size: function(val, opts) {
-                            // Dynamic marker size based on product reforms
-                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].markerSize;
-                        },
-                        strokeWidth: function(val, opts) {
-                            // Black border for points with product reforms
-                            return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].strokeColor === '#000000' ? 2 : 0;
-                        }
+                        size: 8,  // Use static size for now
+                        strokeWidth: 1  // Use static stroke width
+                        // size: function(val, opts) {
+                        //     // Dynamic marker size based on product reforms
+                        //     return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].markerSize;
+                        // },
+                        // strokeWidth: function(val, opts) {
+                        //     // Black border for points with product reforms
+                        //     return opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex].strokeColor === '#000000' ? 2 : 0;
+                        // }
                     },
                     legend: { 
                         show: true, 

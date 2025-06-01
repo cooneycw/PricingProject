@@ -502,9 +502,9 @@
                         zoom: { enabled: true, type: 'xy' }
                     },
                     stroke: {
-                        width: [0, 0, 2, 2], // No stroke for scatter, 2px for trend lines
-                        curve: ['straight', 'straight', 'smooth', 'smooth'],
-                        dashArray: [0, 0, 5, 5] // Dashed lines for trends
+                        curve: ['straight', 'straight', 'smooth', 'smooth'],  // Straight for scatter, smooth for regression lines
+                        width: [0, 0, 2, 2],  // No line for scatter points, width 2 for regression lines
+                        dashArray: [0, 0, 0, 0]  // No dashes
                     },
                     colors: ['#FF4560', '#00E396', '#FF4560', '#00E396'], // Red for close, green for retention
                     title: { text: 'Rate Increase Impact on Close & Retention Ratios' },
@@ -533,7 +533,13 @@
                     },
                     markers: {
                         size: [8, 8, 0, 0],  // Size for each series: scatter points 8, lines 0
-                        strokeWidth: [1, 1, 0, 0]  // Stroke width for each series
+                        strokeWidth: [1, 1, 0, 0],  // Stroke width for each series
+                        hover: {
+                            sizeOffset: 3
+                        }
+                    },
+                    dataLabels: {
+                        enabled: false  // Turn on temporarily to debug
                     },
                     legend: { 
                         show: true, 

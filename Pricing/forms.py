@@ -29,8 +29,8 @@ class GamePrefsForm(forms.ModelForm):
     sel_type_01 = forms.ChoiceField(choices=CHOICES, label="CPU w Growth profile:")
     sel_type_02 = forms.ChoiceField(choices=CHOICES, label="CPU w Profitability profile:")
     sel_type_03 = forms.ChoiceField(choices=CHOICES, label="CPU w Balanced profile:")
-    game_observable = forms.BooleanField(required=False, initial=CONFIG_OBSERVABLE,
-                                         label="Check box to make game observable by others:")
+    # Hidden field - game_observable checkbox removed from UI but field kept for backend compatibility
+    game_observable = forms.BooleanField(required=False, initial=False, widget=forms.HiddenInput())
 
     default_selection_type = forms.ChoiceField(
         choices=[('Growth', 'Growth'), ('Profit', 'Profit'), ('Balanced', 'Balanced')],

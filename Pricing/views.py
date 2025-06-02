@@ -1219,7 +1219,12 @@ def industry_reports(request, game_id):
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
-    selected_year = request.POST.get('year')  # Get the selected year from the query parameters
+    # Handle GET request for year selection (from dropdown)
+    if request.method == 'GET':
+        selected_year = request.GET.get('year')
+    else:
+        selected_year = request.POST.get('year')
+    
     selected_year = int(selected_year) if selected_year else None
     curr_pos = request.session.get('curr_pos', 0)
 
@@ -1296,10 +1301,64 @@ def industry_reports(request, game_id):
 
     player_options = list(zip(player_id_list, player_list))
 
+    # Prepare chart data
+    chart_data = None
+    is_novice_game = getattr(game, 'difficulty', 'novice').lower() == 'novice'
+
     if unique_years:  # Proceed if there are any financial years available
         if selected_year not in unique_years:
             selected_year = unique_years[0]
         request.session['selected_year'] = selected_year
+        
+        # Get all company data for the selected year (excluding "Total Industry")
+        company_chart_data = Industry.objects.filter(
+            game_id=game, 
+            year=selected_year
+        ).exclude(player_name="Total Industry").values(
+            'player_name', 'written_premium', 'profit', 'capital', 
+            'annual_expenses', 'cy_losses', 'capital_test'
+        )
+        
+        if company_chart_data:
+            chart_companies = []
+            chart_written_premium = []
+            chart_profitability = []
+            chart_capital = []
+            chart_loss_ratio = []
+            chart_expense_ratio = []
+            chart_mct_failures = []
+            
+            for company in company_chart_data:
+                chart_companies.append(company['player_name'])
+                chart_written_premium.append(float(company['written_premium']))
+                chart_profitability.append(float(company['profit']))
+                chart_capital.append(float(company['capital']))
+                
+                # Calculate loss ratio
+                wp = float(company['written_premium'])
+                loss_ratio = (float(company['cy_losses']) / wp * 100) if wp > 0 else 0
+                chart_loss_ratio.append(loss_ratio)
+                
+                # Calculate expense ratio
+                expense_ratio = (float(company['annual_expenses']) / wp * 100) if wp > 0 else 0
+                chart_expense_ratio.append(expense_ratio)
+                
+                # Check MCT failure
+                is_mct_fail = company['capital_test'] in ['Fail', 'fail', 'False', False]
+                chart_mct_failures.append(is_mct_fail)
+            
+            chart_data = {
+                'companies': chart_companies,
+                'written_premium': chart_written_premium,
+                'profitability': chart_profitability,
+                'capital': chart_capital,
+                'loss_ratio': chart_loss_ratio,
+                'expense_ratio': chart_expense_ratio,
+                'mct_failures': chart_mct_failures,
+                'selected_year': selected_year,
+                'current_user': user.username
+            }
+
         # Create a DataFrame for the total view, excluding 'capital_test' and 'capital_ratio'
         industry_data = Industry.objects.filter(game_id=game, year=selected_year).values('year').annotate(
             written_premium=Sum('written_premium'),
@@ -1461,6 +1520,8 @@ def industry_reports(request, game_id):
         'latest_year': latest_year,
         'selected_year': selected_year,
         'player_options': player_options,
+        'chart_data': chart_data,
+        'is_novice_game': is_novice_game,
     }
     return render(request, template_name, context)
 

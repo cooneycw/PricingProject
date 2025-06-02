@@ -18,53 +18,451 @@
                     </div>
                 {% endif %}
                 {% if has_financial_data %}
-
                         <div style="padding-left: 20px; margin-bottom: 20px;">
-                            <form method="POST" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
-                                {% csrf_token %}
-                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
-                                    <select id="year" name="year">
-                                        {% for year in unique_years %}
-                                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <input type="submit" value="Select" style="margin-right: 40px;">
-                                <input type="submit" name="Last" value="Last" style="margin-right: 10px;">
-                                <input type="submit" name="Next" value="Next">
-                            </form>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <form method="GET" action="" style="display: flex; align-items: center;">
+                                    <div style="margin-right: 15px; width: auto;">
+                                        <label for="year" style="margin-right: 5px;">Latest Year for Display:</label>
+                                    </div>
+                                    <div style="margin-right: 15px;">
+                                        <select id="year" name="year" class="form-select form-select-sm">
+                                            {% for year in unique_years %}
+                                                <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <input type="submit" value="Select" class="btn btn-primary btn-sm" style="margin-right: 20px;">
+                                    <input type="submit" name="Last" value="Last" class="btn btn-secondary btn-sm pagination-btn" style="margin-right: 10px;">
+                                    <input type="submit" name="Next" value="Next" class="btn btn-secondary btn-sm pagination-btn">
+                                </form>
+                                <button id="toggleViewBtn" class="btn btn-primary btn-sm">Show Chart</button>
+                            </div>
                             <hr>
-                            <div class="financial-data-table">
+                            <div class="industry-data-table" style="{{ initial_table_style|default:'display: block' }};">
                                 {{ financial_data_table | safe }}
+                            </div>
+                            <div id="industryChart" style="{{ initial_chart_style|default:'display: none' }};">
+                                <div id="industryChartCanvas"></div>
                             </div>
                         </div>
                 {% endif %}
             </div>
         </section>
     </main>
-<script>
+{% if has_financial_data %}
+    {{ chart_data|json_script:"chartDataJson" }}
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Select all table rows within the financial-data-table
-        var tableRows = document.querySelectorAll('.financial-data-table tr');
-
-        // Loop through each table row
+        // Table cell formatting (as before)
+        var tableRows = document.querySelectorAll('.industry-data-table tr');
         tableRows.forEach(function(row) {
-            // Select all th and td elements in the current row
             var cells = row.querySelectorAll('th, td');
-
-            // Loop through each cell
             cells.forEach(function(cell) {
-                // Check if the cell is empty
                 if(cell.innerHTML.trim() === '') {
-                    // If empty, insert a non-breaking space character
                     cell.innerHTML = '&nbsp;';
                 }
-
-                // Apply the monospaced font to each cell
-                cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
+                cell.style.fontFamily = "'Roboto Mono', monospace";
             });
         });
-    });
-</script>
 
+        // Toggle and Chart Logic
+        const toggleButton = document.getElementById('toggleViewBtn');
+        const tableContainer = document.querySelector('.industry-data-table');
+        const industryChartContainer = document.getElementById('industryChart');
+        const industryChartCanvas = document.getElementById('industryChartCanvas');
+
+        let isNoviceGame = false;
+        try {
+            isNoviceGame = JSON.parse("{{ is_novice_game|yesno:'true,false,null' }}");
+        } catch (e) {
+            console.error('Error parsing is_novice_game:', e);
+            isNoviceGame = false;
+        }
+
+        let chartData = null;
+        const chartDataElement = document.getElementById('chartDataJson');
+        if (chartDataElement) {
+            try {
+                chartData = JSON.parse(chartDataElement.textContent);
+            } catch (e) {
+                chartData = null;
+            }
+        }
+
+        // Determine current system's latest year
+        let currentSystemLatestYear = null;
+        if (chartData && chartData.selected_year) {
+            currentSystemLatestYear = chartData.selected_year;
+        }
+        if (!currentSystemLatestYear) {
+            const yearOptions = Array.from(document.querySelectorAll('#year option'))
+                                     .map(opt => parseInt(opt.value, 10))
+                                     .filter(y => !isNaN(y));
+            if (yearOptions.length > 0) {
+                currentSystemLatestYear = Math.max(...yearOptions);
+            }
+        }
+
+        function setButtonState(showChart) {
+            if (toggleButton) {
+                if (showChart) {
+                    toggleButton.textContent = 'Show Table';
+                    toggleButton.classList.remove('btn-primary');
+                    toggleButton.classList.add('btn-warning');
+                } else {
+                    toggleButton.textContent = 'Show Chart';
+                    toggleButton.classList.remove('btn-warning');
+                    toggleButton.classList.add('btn-primary');
+                }
+            }
+        }
+
+        function setViewVisibility(showChart) {
+            const paginationButtons = document.querySelectorAll('.pagination-btn');
+            
+            if (showChart) {
+                if (tableContainer) tableContainer.style.display = 'none';
+                if (industryChartContainer) industryChartContainer.style.display = 'block';
+                // Hide pagination buttons when showing chart (all companies visible)
+                paginationButtons.forEach(btn => btn.style.display = 'none');
+            } else {
+                if (tableContainer) tableContainer.style.display = 'block';
+                if (industryChartContainer) industryChartContainer.style.display = 'none';
+                // Show pagination buttons when showing table (limited companies per view)
+                paginationButtons.forEach(btn => btn.style.display = 'inline-block');
+            }
+            setButtonState(showChart);
+        }
+
+        // Function to update localStorage and return the view state (true for chart, false for table)
+        function getAndManageStoredIndustryView(currentLatestYearFromSystem, isNoviceUser) {
+            let storedViewPref = localStorage.getItem('industryView');
+            let storedLatestYear = localStorage.getItem('industryLatestYear') ? parseInt(localStorage.getItem('industryLatestYear'), 10) : null;
+            let showChart;
+
+            if (currentLatestYearFromSystem !== null && (storedLatestYear === null || currentLatestYearFromSystem > storedLatestYear)) {
+                showChart = true;
+                localStorage.setItem('industryView', 'chart');
+                localStorage.setItem('industryLatestYear', currentLatestYearFromSystem.toString());
+            } else if (storedViewPref) {
+                showChart = (storedViewPref === 'chart');
+                if (storedLatestYear === null && currentLatestYearFromSystem !== null) {
+                    localStorage.setItem('industryLatestYear', currentLatestYearFromSystem.toString());
+                }
+            } else {
+                showChart = isNoviceUser;
+                localStorage.setItem('industryView', showChart ? 'chart' : 'table');
+                if (currentLatestYearFromSystem !== null) {
+                    localStorage.setItem('industryLatestYear', currentLatestYearFromSystem.toString());
+                }
+            }
+            return showChart;
+        }
+
+        let showChartsInitialState = getAndManageStoredIndustryView(currentSystemLatestYear, isNoviceGame);
+
+        if (tableContainer && industryChartContainer && toggleButton) {
+            setViewVisibility(showChartsInitialState);
+        }
+
+        if (chartData && chartData.companies && chartData.companies.length > 0) {
+            console.log('Initial chartData:', JSON.stringify(chartData, null, 2)); // Log initial chartData
+            // Prepare scatter plot data series
+            const profitabilityData = [];
+            const capitalData = [];
+            const lossRatioData = [];
+            const expenseRatioData = [];
+
+            chartData.companies.forEach((company, index) => {
+                const writtenPremium = chartData.written_premium[index];
+                const isMctFail = chartData.mct_failures[index];
+                const isCurrentUser = company === chartData.current_user;
+                const markerShape = isCurrentUser ? 'square' : 'circle';
+
+                // Define series colors (avoiding red to prevent MCT conflict)
+                const seriesColors = ['#008FFB', '#00E396', '#FEB019', '#9C27B0']; // Blue, Green, Orange, Purple
+                const mctFailColor = '#FF0000'; // Dark red for MCT failures
+
+                // Profitability vs Written Premium
+                const profitabilityColor = isMctFail ? mctFailColor : seriesColors[0];
+                profitabilityData.push({
+                    x: writtenPremium,
+                    y: chartData.profitability[index],
+                    fillColor: profitabilityColor,
+                    company: company,
+                    mct_fail: isMctFail,
+                    is_current_user: isCurrentUser,
+                    marker_shape: markerShape
+                });
+
+                // Capital vs Written Premium  
+                const capitalColor = isMctFail ? mctFailColor : seriesColors[1];
+                capitalData.push({
+                    x: writtenPremium,
+                    y: chartData.capital[index],
+                    fillColor: capitalColor,
+                    company: company,
+                    mct_fail: isMctFail,
+                    is_current_user: isCurrentUser,
+                    marker_shape: markerShape
+                });
+
+                // Loss Ratio vs Written Premium
+                const lossRatioColor = isMctFail ? mctFailColor : seriesColors[2];
+                lossRatioData.push({
+                    x: writtenPremium,
+                    y: chartData.loss_ratio[index],
+                    fillColor: lossRatioColor,
+                    company: company,
+                    mct_fail: isMctFail,
+                    is_current_user: isCurrentUser,
+                    marker_shape: markerShape
+                });
+
+                // Expense Ratio vs Written Premium
+                const expenseRatioColor = isMctFail ? mctFailColor : seriesColors[3];
+                expenseRatioData.push({
+                    x: writtenPremium,
+                    y: chartData.expense_ratio[index],
+                    fillColor: expenseRatioColor,
+                    company: company,
+                    mct_fail: isMctFail,
+                    is_current_user: isCurrentUser,
+                    marker_shape: markerShape
+                });
+            });
+
+            // Build discrete marker list for current user (square markers)
+            const discreteMarkers = [];
+            const seriesColors = ['#008FFB', '#00E396', '#FEB019', '#9C27B0']; // Blue, Green, Orange, Purple
+            const mctFailColor = '#FF0000';
+            
+            [profitabilityData, capitalData, lossRatioData, expenseRatioData].forEach((seriesData, seriesIndex) => {
+                seriesData.forEach((pt, idx) => {
+                    if (pt.is_current_user) {
+                        // Use the same color logic as regular points
+                        const markerColor = pt.mct_fail ? mctFailColor : seriesColors[seriesIndex];
+                        discreteMarkers.push({
+                            seriesIndex: seriesIndex,
+                            dataPointIndex: idx,
+                            size: 8,
+                            strokeWidth: 1,
+                            strokeColor: '#000',
+                            fillColor: markerColor,
+                            shape: 'square'
+                        });
+                    }
+                });
+            });
+
+            // Function to update y-axis based on active series
+            function updateYAxis(chart, seriesIndex) {
+                let yAxisConfig = {};
+                
+                switch(seriesIndex) {
+                    case 0: // WP vs Profitability
+                        yAxisConfig = {
+                            title: { text: 'Profitability ($)' },
+                            labels: {
+                                formatter: function(val) {
+                                    return val !== undefined && val !== null ? "$" + Math.round(val).toLocaleString() : '';
+                                }
+                            }
+                        };
+                        break;
+                    case 1: // WP vs Capital
+                        yAxisConfig = {
+                            title: { text: 'Capital ($)' },
+                            labels: {
+                                formatter: function(val) {
+                                    return val !== undefined && val !== null ? "$" + Math.round(val).toLocaleString() : '';
+                                }
+                            }
+                        };
+                        break;
+                    case 2: // WP vs Loss Ratio
+                        yAxisConfig = {
+                            title: { text: 'Loss Ratio (%)' },
+                            labels: {
+                                formatter: function(val) {
+                                    return val !== undefined && val !== null ? val.toFixed(1) + "%" : '';
+                                }
+                            }
+                        };
+                        break;
+                    case 3: // WP vs Expense Ratio
+                        yAxisConfig = {
+                            title: { text: 'Expense Ratio (%)' },
+                            labels: {
+                                formatter: function(val) {
+                                    return val !== undefined && val !== null ? val.toFixed(1) + "%" : '';
+                                }
+                            }
+                        };
+                        break;
+                }
+                
+                chart.updateOptions({
+                    yaxis: yAxisConfig
+                });
+            }
+
+            var optionsIndustry = {
+                series: [
+                    { name: 'WP vs Profitability', type: 'scatter', data: profitabilityData },
+                    { name: 'WP vs Capital', type: 'scatter', data: capitalData },
+                    { name: 'WP vs Loss Ratio', type: 'scatter', data: lossRatioData },
+                    { name: 'WP vs Expense Ratio', type: 'scatter', data: expenseRatioData }
+                ],
+                chart: {
+                    height: 400,
+                    type: 'scatter',
+                    toolbar: { show: true },
+                    zoom: { enabled: true, type: 'xy' },
+                    events: {
+                        legendClick: function(chartContext, seriesIndex, config) {
+                            const chart = chartContext;
+                            const allSeries = chart.w.globals.series;
+                            
+                            // Hide all other series when one is clicked
+                            for (let i = 0; i < allSeries.length; i++) {
+                                if (i !== seriesIndex) {
+                                    chart.hideSeries(chart.w.globals.seriesNames[i]);
+                                }
+                            }
+                            
+                            // Show the clicked series
+                            chart.showSeries(chart.w.globals.seriesNames[seriesIndex]);
+                            
+                            // Update y-axis based on active series
+                            updateYAxis(chart, seriesIndex);
+                            
+                            return false; // Prevent default legend click behavior
+                        }
+                    }
+                },
+                colors: ['#008FFB', '#00E396', '#FEB019', '#9C27B0'], // Blue, Green, Orange, Purple
+                markers: {
+                    size: 8,
+                    strokeWidth: 1,
+                    strokeColors: '#000',
+                    hover: {
+                        size: 10,
+                        sizeOffset: 2
+                    },
+                    discrete: discreteMarkers
+                },
+                title: { 
+                    text: 'Industry Analysis: Company Performance by Written Premium (' + chartData.selected_year + ')',
+                    style: { fontSize: '16px', fontWeight: 'bold' }
+                },
+                xaxis: {
+                    title: { text: 'Gross Written Premium ($)' },
+                    type: 'numeric',
+                    labels: {
+                        formatter: function(val) {
+                            return val !== undefined && val !== null ? "$" + Math.round(val).toLocaleString() : '';
+                        }
+                    }
+                },
+                yaxis: {
+                    title: { text: 'Profitability ($)' },
+                    labels: {
+                        formatter: function(val) {
+                            return val !== undefined && val !== null ? "$" + Math.round(val).toLocaleString() : '';
+                        }
+                    }
+                },
+                grid: {
+                    xaxis: { lines: { show: true } },
+                    yaxis: { lines: { show: true } }
+                },
+                legend: { 
+                    show: true, 
+                    position: 'top',
+                    horizontalAlign: 'left',
+                    markers: { width: 12, height: 12 }
+                },
+                tooltip: {
+                    custom: function({ series, seriesIndex, dataPointIndex, w }) {
+                        const point = w.config.series[seriesIndex].data[dataPointIndex];
+                        const seriesName = w.globals.seriesNames[seriesIndex];
+                        
+                        let yLabel = '';
+                        let yValue = '';
+                        
+                        if (seriesName === 'WP vs Profitability') {
+                            yLabel = 'Profitability';
+                            yValue = '$' + Math.round(point.y).toLocaleString();
+                        } else if (seriesName === 'WP vs Capital') {
+                            yLabel = 'Capital';
+                            yValue = '$' + Math.round(point.y).toLocaleString();
+                        } else if (seriesName === 'WP vs Loss Ratio') {
+                            yLabel = 'Loss Ratio';
+                            yValue = point.y.toFixed(1) + '%';
+                        } else if (seriesName === 'WP vs Expense Ratio') {
+                            yLabel = 'Expense Ratio';
+                            yValue = point.y.toFixed(1) + '%';
+                        }
+                        
+                        let tooltipHtml = '<div style="padding: 10px; font-size: 12px;">';
+                        tooltipHtml += '<div><strong>' + (point.company || 'Unknown') + '</strong>';
+                        if (point.is_current_user) {
+                            tooltipHtml += ' <span style="color: blue; font-weight: bold;">(You)</span>';
+                        }
+                        tooltipHtml += '</div>';
+                        tooltipHtml += '<div>Written Premium: $' + Math.round(point.x).toLocaleString() + '</div>';
+                        tooltipHtml += '<div>' + yLabel + ': ' + yValue + '</div>';
+                        if (point.mct_fail) {
+                            tooltipHtml += '<div style="color: red; font-weight: bold;">MCT Failure</div>';
+                        }
+                        tooltipHtml += '</div>';
+                        
+                        return tooltipHtml;
+                    }
+                }
+            };
+
+            var industryChart = null;
+            if (industryChartCanvas) {
+                industryChart = new ApexCharts(industryChartCanvas, optionsIndustry);
+                industryChart.render().then(() => {
+                    console.log('Industry chart rendered successfully.');
+                    
+                    // Hide all series except profitability by default
+                    try {
+                        industryChart.hideSeries('WP vs Capital');
+                        industryChart.hideSeries('WP vs Loss Ratio');
+                        industryChart.hideSeries('WP vs Expense Ratio');
+                        console.log('Default series visibility set in industry chart.');
+                    } catch (e) {
+                        console.error('Error setting default series visibility:', e);
+                    }
+                }).catch(err => {
+                    console.error('Industry chart failed to render:', err);
+                    if (toggleButton) toggleButton.style.display = 'none';
+                    if (industryChartContainer) industryChartContainer.style.display = 'none';
+                });
+            }
+        } else {
+            if (toggleButton) toggleButton.style.display = 'none';
+            if (industryChartContainer) industryChartContainer.style.display = 'none';
+        }
+
+        if (toggleButton) {
+            toggleButton.addEventListener('click', function() {
+                const isChartVisible = industryChartContainer && industryChartContainer.style.display === 'block';
+                const newViewIsCharts = !isChartVisible;
+                setViewVisibility(newViewIsCharts);
+
+                localStorage.setItem('industryView', newViewIsCharts ? 'chart' : 'table');
+                if (currentSystemLatestYear !== null) {
+                    localStorage.setItem('industryLatestYear', currentSystemLatestYear.toString());
+                }
+            });
+        }
+    });
+    </script>
+{% endif %}
 {% endblock content %}

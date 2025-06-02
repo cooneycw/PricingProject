@@ -20,39 +20,50 @@
                 {% endif %}
                 {% if has_financial_data %}
                         <div style="padding-left: 20px;  margin-bottom: 20px;">
-                            <form method="POST" action="">
+                            <form method="POST" action="" id="reportOptionsForm">
                               {% csrf_token %}
-                              <div class="form-group" style="margin-bottom: 10px;margin-right: 14px">
-                                  <label for="year" style="margin-right: 14px">Report Year:</label>
-                                  <select id="year" name="year">
-                                      {% for year in unique_years %}
-                                          <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
-                                      {% endfor %}
-                                  </select>
+                              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                  <div style="display: flex; align-items: center;">
+                                      <div class="form-group" style="margin-right: 20px;">
+                                          <label for="year" style="margin-right: 5px">Report Year:</label>
+                                          <select id="year" name="year" class="form-select form-select-sm">
+                                              {% for year in unique_years %}
+                                                  <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                              {% endfor %}
+                                          </select>
+                                      </div>
+                                      <div class="form-group" style="margin-right: 20px;">
+                                          <label for="coverage" style="margin-right: 5px">Coverage:</label>
+                                          <select id="coverage" name="coverage" class="form-select form-select-sm">
+                                              {% for coverage_id, coverage_name in coverage_options %}
+                                                  <option value="{{ coverage_id }}" {% if coverage_id == selected_coverage %}selected{% endif %}>{{ coverage_name }}</option>
+                                              {% endfor %}
+                                          </select>
+                                      </div>
+                                      <input type="submit" value="Select" class="btn btn-primary btn-sm" style="margin-right: 10px;">
+                                  </div>
+                                  <button type="button" id="toggleViewBtn" class="btn btn-warning btn-sm">Show Table</button>
                               </div>
-                              <div class="form-group" style="margin-bottom: 10px">
-                                  <label for="coverage" style="margin-right: 33px">Coverage:</label>
-                                  <select id="coverage" name="coverage">
-                                      {% for coverage_id, coverage_name in coverage_options %}
-                                          <option value="{{ coverage_id }}" {% if coverage_id == selected_coverage %}selected{% endif %}>{{ coverage_name }}</option>
-                                      {% endfor %}
-                                  </select>
-                              </div>
-                              <input type="submit" value="Select" style="margin-right: 40px;">
                           </form>
                           <hr>
-                            <div class="in-line">
-                                <h6>Claim Trend Data:</h6>
-                            </div>
-                          <div class="financial-data-table" style="margin-bottom: 40px;">
-                              {{ trend_data_table|safe }}
+                          <div id="tableView" style="display: none;">
+                                <div class="in-line">
+                                    <h6>Claim Trend Data:</h6>
+                                </div>
+                              <div class="financial-data-table" style="margin-bottom: 40px;">
+                                  {{ trend_data_table|safe }}
+                              </div>
+                            <hr>
+                                <div class="in-line">
+                                    <h6>Claim Linear Estimates:</h6>
+                                </div>
+                              <div class="financial-data-table" style="margin-bottom: 40px;">
+                                  {{ trend_est_table|safe }}
+                              </div>
                           </div>
-                        <hr>
-                            <div class="in-line">
-                                <h6>Claim Linear Estimates:</h6>
-                            </div>
-                          <div class="financial-data-table" style="margin-bottom: 40px;">
-                              {{ trend_est_table|safe }}
+                          <div id="chartView" style="display: block;">
+                            <!-- Chart will be added here -->
+                            <p>Chart placeholder</p>
                           </div>
                         </div>
                 {% endif %}
@@ -77,26 +88,90 @@
     </style>
  <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Select all table rows within the financial-data-table
         var tableRows = document.querySelectorAll('.financial-data-table tr');
-
-        // Loop through each table row
         tableRows.forEach(function(row) {
-            // Select all th and td elements in the current row
             var cells = row.querySelectorAll('th, td');
-
-            // Loop through each cell
             cells.forEach(function(cell) {
-                // Check if the cell is empty
                 if(cell.innerHTML.trim() === '') {
-                    // If empty, insert a non-breaking space character
                     cell.innerHTML = '&nbsp;';
                 }
-
-                // Apply the monospaced font to each cell
-                cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
+                cell.style.fontFamily = "'Roboto Mono', monospace";
             });
         });
+
+        const toggleViewBtn = document.getElementById('toggleViewBtn');
+        const tableView = document.getElementById('tableView');
+        const chartView = document.getElementById('chartView');
+        const yearSelect = document.getElementById('year');
+        const coverageSelect = document.getElementById('coverage');
+        const reportOptionsForm = document.getElementById('reportOptionsForm');
+
+        function getSystemLatestYear() {
+            const yearOptions = Array.from(yearSelect.options).map(opt => parseInt(opt.value, 10));
+            return yearOptions.length > 0 ? Math.max(...yearOptions) : null;
+        }
+
+        function setButtonState(showChart) {
+            if (showChart) {
+                toggleViewBtn.textContent = 'Show Table';
+                toggleViewBtn.classList.remove('btn-primary');
+                toggleViewBtn.classList.add('btn-warning');
+            } else {
+                toggleViewBtn.textContent = 'Show Chart';
+                toggleViewBtn.classList.remove('btn-warning');
+                toggleViewBtn.classList.add('btn-primary');
+            }
+        }
+
+        function setViewVisibility(showChart) {
+            tableView.style.display = showChart ? 'none' : 'block';
+            chartView.style.display = showChart ? 'block' : 'none';
+            setButtonState(showChart);
+        }
+
+        function getAndManageStoredClaimTrendView() {
+            let storedViewPref = localStorage.getItem('claimTrendView');
+            let storedLatestYear = localStorage.getItem('claimTrendLatestYear') ? parseInt(localStorage.getItem('claimTrendLatestYear'), 10) : null;
+            let currentSystemLatestYear = getSystemLatestYear();
+            let showChart;
+
+            if (currentSystemLatestYear !== null && (storedLatestYear === null || currentSystemLatestYear > storedLatestYear)) {
+                showChart = true; // Default to chart for new data year or first time
+                localStorage.setItem('claimTrendView', 'chart');
+                localStorage.setItem('claimTrendLatestYear', currentSystemLatestYear.toString());
+            } else if (storedViewPref) {
+                showChart = (storedViewPref === 'chart');
+                if (storedLatestYear === null && currentSystemLatestYear !== null) {
+                     localStorage.setItem('claimTrendLatestYear', currentSystemLatestYear.toString());
+                }
+            } else {
+                showChart = true; // Default to chart if no preference stored
+                localStorage.setItem('claimTrendView', 'chart');
+                if (currentSystemLatestYear !== null) {
+                    localStorage.setItem('claimTrendLatestYear', currentSystemLatestYear.toString());
+                }
+            }
+            return showChart;
+        }
+
+        let showChartInitial = getAndManageStoredClaimTrendView();
+        setViewVisibility(showChartInitial);
+
+        toggleViewBtn.addEventListener('click', function() {
+            const isChartCurrentlyVisible = chartView.style.display === 'block';
+            const newViewIsChart = !isChartCurrentlyVisible;
+            setViewVisibility(newViewIsChart);
+            localStorage.setItem('claimTrendView', newViewIsChart ? 'chart' : 'table');
+            let currentSystemLatestYear = getSystemLatestYear();
+            if (currentSystemLatestYear !== null) {
+                 localStorage.setItem('claimTrendLatestYear', currentSystemLatestYear.toString());
+            }
+        });
+
+        // Ensure form submission preserves the view state by not overriding via localStorage in that specific case
+        // The page reloads and getAndManageStoredClaimTrendView will correctly apply the stored preference.
+        // No special handling needed for form submit, as the general logic covers it.
+
     });
 </script>
 

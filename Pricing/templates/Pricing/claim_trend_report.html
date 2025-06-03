@@ -24,19 +24,11 @@
                               {% csrf_token %}
                               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
                                   <div style="display: flex; align-items: center;">
-                                      <div class="form-group" style="margin-right: 20px;">
-                                          <label for="year" style="margin-right: 5px">Report Year:</label>
+                                      <div class="form-group" style="margin-right: 20px; display: flex; align-items: center;">
+                                          <label for="year" style="margin-right: 5px; margin-bottom: 0;">Report Year:</label>
                                           <select id="year" name="year" class="form-select form-select-sm">
                                               {% for year in unique_years %}
                                                   <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
-                                              {% endfor %}
-                                          </select>
-                                      </div>
-                                      <div class="form-group" style="margin-right: 20px;">
-                                          <label for="coverage" style="margin-right: 5px">Coverage:</label>
-                                          <select id="coverage" name="coverage" class="form-select form-select-sm">
-                                              {% for coverage_id, coverage_name in coverage_options %}
-                                                  <option value="{{ coverage_id }}" {% if coverage_id == selected_coverage %}selected{% endif %}>{{ coverage_name }}</option>
                                               {% endfor %}
                                           </select>
                                       </div>
@@ -44,9 +36,25 @@
                                   </div>
                                   <button type="button" id="toggleViewBtn" class="btn btn-warning btn-sm">Show Table</button>
                               </div>
+                              <!-- Hidden coverage selector for form submission -->
+                              <select id="coverage" name="coverage" class="form-select form-select-sm" style="display: none;">
+                                  {% for coverage_id, coverage_name in coverage_options %}
+                                      <option value="{{ coverage_id }}" {% if coverage_id|stringformat:"s" == selected_coverage|stringformat:"s" %}selected{% endif %}>{{ coverage_name }}</option>
+                                  {% endfor %}
+                              </select>
                           </form>
                           <hr>
                           <div id="tableView" style="display: none;">
+                                <!-- Table Coverage Buttons positioned above "Claim Trend Data" heading -->
+                                <div class="form-group" id="tableCoverageGroup" style="margin-bottom: 15px; display: flex; align-items: center;">
+                                    <div class="btn-group" role="group" aria-label="Table Coverage Selection">
+                                        {% for coverage_id, coverage_name in coverage_options %}
+                                            <button type="button" class="btn btn-sm table-coverage-btn {% if coverage_id|stringformat:"s" == selected_coverage|stringformat:"s" %}btn-primary{% else %}btn-outline-primary{% endif %}" data-value="{{ coverage_id }}">
+                                                {{ coverage_name }}
+                                            </button>
+                                        {% endfor %}
+                                    </div>
+                                </div>
                                 <div class="in-line">
                                     <h6>Claim Trend Data:</h6>
                                 </div>
@@ -62,14 +70,34 @@
                               </div>
                           </div>
                           <div id="chartView" style="display: block;">
-                            <!-- Chart will be added here -->
-                            <p>Chart placeholder</p>
+                            <!-- Chart controls positioned above the chart -->
+                            <div style="margin-bottom: 10px; display: flex; justify-content: flex-start;">
+                                <div style="margin-right: 20px;">
+                                    <div class="btn-group" role="group" aria-label="Chart Coverage Selection">
+                                        {% for coverage_id, coverage_name in coverage_options %}
+                                            <button type="button" class="btn btn-sm chart-coverage-btn {% if coverage_id|stringformat:"s" == selected_coverage|stringformat:"s" %}btn-primary{% else %}btn-outline-primary{% endif %}" data-value="{{ coverage_id }}">
+                                                {{ coverage_name }}
+                                            </button>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div style="margin-right: 20px;">
+                                    <div class="btn-group" role="group" aria-label="Metric selection">
+                                        <button type="button" class="btn btn-outline-primary btn-sm metric-btn" data-metric="frequency">Frequency</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm metric-btn" data-metric="severity">Severity</button>
+                                        <button type="button" class="btn btn-primary btn-sm metric-btn" data-metric="loss_cost">Loss Cost</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="claimTrendChart" style="height: 400px;"></div>
                           </div>
                         </div>
                 {% endif %}
             </div>
         </section>
     </main>
+    {{ chart_data|json_script:"chartDataJson" }}
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <style>
     .blue-text {
         color: blue;
@@ -84,6 +112,12 @@
     h6 {
          display: inline; /* Display the <h6> elements inline */
 
+    }
+    .coverage-btn {
+        min-width: 90px;
+    }
+    .metric-btn {
+        min-width: 75px;
     }
     </style>
  <script>
@@ -104,7 +138,43 @@
         const chartView = document.getElementById('chartView');
         const yearSelect = document.getElementById('year');
         const coverageSelect = document.getElementById('coverage');
+        const tableCoverageGroup = document.getElementById('tableCoverageGroup');
         const reportOptionsForm = document.getElementById('reportOptionsForm');
+        const metricButtons = document.querySelectorAll('.metric-btn');
+        const tableCoverageButtons = document.querySelectorAll('.table-coverage-btn');
+        const chartCoverageButtons = document.querySelectorAll('.chart-coverage-btn');
+        const allCoverageButtons = document.querySelectorAll('.table-coverage-btn, .chart-coverage-btn');
+
+        let chartData = null;
+        let currentChart = null;
+
+        // Map coverage IDs (from button data-value) to names (for chart logic)
+        const coverageIdToNameMap = {
+            '0': 'Bodily Injury',
+            '1': 'Collision',
+            '2': 'Total'
+        };
+        // Map coverage names to IDs (for setting hidden select initially)
+        const coverageNameToIdMap = {
+            'Bodily Injury': '0',
+            'Collision': '1',
+            'Total': '2'
+        };
+
+        // Determine initial currentCoverage for the chart based on the hidden select (set by Django)
+        let initialCoverageId = coverageSelect.value; // e.g., "0", "1", "2"
+        let currentCoverage = coverageIdToNameMap[initialCoverageId] || 'Total'; // Default to 'Total' if map fails
+        let currentMetric = 'loss_cost'; // Default metric
+
+        // Parse chart data
+        const chartDataElement = document.getElementById('chartDataJson');
+        if (chartDataElement) {
+            try {
+                chartData = JSON.parse(chartDataElement.textContent);
+            } catch (e) {
+                console.error('Error parsing chart data:', e);
+            }
+        }
 
         function getSystemLatestYear() {
             const yearOptions = Array.from(yearSelect.options).map(opt => parseInt(opt.value, 10));
@@ -126,7 +196,12 @@
         function setViewVisibility(showChart) {
             tableView.style.display = showChart ? 'none' : 'block';
             chartView.style.display = showChart ? 'block' : 'none';
+            // Coverage buttons are now only in table view, no need to keep them always visible
             setButtonState(showChart);
+            
+            if (showChart && chartData) {
+                updateChart();
+            }
         }
 
         function getAndManageStoredClaimTrendView() {
@@ -154,6 +229,250 @@
             return showChart;
         }
 
+        function setActiveCoverageButton(activeCoverageId) {
+            allCoverageButtons.forEach(btn => {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-outline-primary');
+                if (btn.dataset.value === activeCoverageId.toString()) {
+                    btn.classList.remove('btn-outline-primary');
+                    btn.classList.add('btn-primary');
+                }
+            });
+        }
+
+        function setMetricButtonActive(metric) {
+            metricButtons.forEach(btn => {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-outline-primary');
+                if (btn.dataset.metric === metric) {
+                    btn.classList.remove('btn-outline-primary');
+                    btn.classList.add('btn-primary');
+                }
+            });
+        }
+
+        function updateChart() {
+            console.log('--- updateChart called ---');
+            console.log('chartData.years:', chartData.years);
+
+            if (!chartData || !chartData.coverages) {
+                console.error('No chart data available');
+                return;
+            }
+
+            const selectedMetric = currentMetric;
+            
+            if (!chartData.coverages[currentCoverage]) {
+                console.error('Coverage data not found:', currentCoverage);
+                return;
+            }
+
+            const coverageData = chartData.coverages[currentCoverage];
+            console.log('coverageData.reform_years:', coverageData.reform_years);
+
+            // Log raw data for the selected coverage
+            if (currentCoverage === 'Bodily Injury') {
+                console.log('RAW Bodily Injury actual_loss_cost:', coverageData.actual_loss_cost);
+                console.log('RAW Bodily Injury projected_loss_cost:', coverageData.projected_loss_cost);
+            }
+            
+            // Prepare data based on selected metric
+            let rawActualData, projectedData, yAxisTitle, formatFunc;
+            
+            switch(selectedMetric) {
+                case 'loss_cost':
+                    rawActualData = coverageData.actual_loss_cost;
+                    projectedData = coverageData.projected_loss_cost;
+                    yAxisTitle = 'Loss Cost ($)';
+                    formatFunc = function(value) { 
+                        return value != null ? '$' + value.toFixed(2) : 'N/A'; 
+                    };
+                    break;
+                case 'frequency':
+                    rawActualData = coverageData.actual_frequency;
+                    projectedData = coverageData.projected_frequency;
+                    yAxisTitle = 'Frequency (%)';
+                    formatFunc = function(value) { 
+                        return value != null ? value.toFixed(1) + '%' : 'N/A'; 
+                    };
+                    break;
+                case 'severity':
+                    rawActualData = coverageData.actual_severity;
+                    projectedData = coverageData.projected_severity;
+                    yAxisTitle = 'Severity ($)';
+                    formatFunc = function(value) { 
+                        return value != null ? '$' + value.toFixed(2) : 'N/A'; 
+                    };
+                    break;
+            }
+
+            // Helper to reverse array (non-mutating)
+            const rev = arr => arr ? arr.slice().reverse() : arr;
+
+            // Convert raw actual data to ascending order (oldest -> newest)
+            const actualData = rev(rawActualData);
+
+            // Prepare years for chart - reverse to show newest first (left to right)
+            const reversedYearsNum = chartData.years.map(Number).reverse();
+            const projectedYearNum = Math.max(...reversedYearsNum) + 1;
+            // Use strings for categories to avoid numeric/string mismatch in annotations
+            const reversedYears = reversedYearsNum.map(String);
+            const projectedYear = projectedYearNum.toString();
+            const allYears = [projectedYear, ...reversedYears];
+
+            // Build data arrays aligned with categories
+            const chartActualData = [];
+            const chartProjectedData = [];
+
+            const forecastValue = projectedData[projectedData.length - 1]; // last element is forecast year (projectedYear)
+
+            allYears.forEach(yearStr => {
+                if (yearStr === projectedYear) {
+                    // No actual data for forecast year
+                    chartActualData.push(null);
+                    chartProjectedData.push(forecastValue);
+                } else {
+                    const idx = chartData.years.indexOf(Number(yearStr));
+                    if (idx !== -1) {
+                        chartActualData.push(actualData[idx]);
+                        chartProjectedData.push(projectedData[idx]);
+                    } else {
+                        chartActualData.push(null);
+                        chartProjectedData.push(null);
+                    }
+                }
+            });
+
+            // Prepare reform annotations with correct reform types
+            const annotations = {
+                xaxis: coverageData.reform_years.map(year => {
+                    const yearStr = year.toString();
+                    if (!allYears.includes(yearStr)) {
+                        console.log('Reform year not in allYears:', yearStr, allYears);
+                        return null;
+                    }
+                    const reformType = coverageData.reform_details && coverageData.reform_details[year]
+                        ? coverageData.reform_details[year]
+                        : 'Unknown Reform Type';
+                    console.log('Creating reform annotation at x (category):', yearStr, 'for', reformType);
+                    return {
+                        x: yearStr,
+                        borderColor: '#FF0000',
+                        borderWidth: 2,
+                        strokeDashArray: 5,
+                        label: {
+                            text: `Reforms in Effect for ${reformType}`,
+                            orientation: 'horizontal',
+                            style: {
+                                color: '#FF0000',
+                                background: '#ffffff'
+                            }
+                        }
+                    };
+                }).filter(annotation => annotation !== null)
+            };
+            console.log('Final annotations:', annotations, 'allYears:', allYears);
+
+            const options = {
+                series: [
+                    {
+                        name: 'Actual',
+                        data: chartActualData,
+                        type: 'line'
+                    },
+                    {
+                        name: 'Projected/Fitted',
+                        data: chartProjectedData,
+                        type: 'line'
+                    }
+                ],
+                chart: {
+                    type: 'line',
+                    height: 400,
+                    toolbar: { show: true }
+                },
+                colors: ['#008FFB', '#00E396'],
+                stroke: {
+                    width: [3, 2],
+                    curve: 'smooth',
+                    dashArray: [0, 5]
+                },
+                markers: {
+                    size: 6,
+                    strokeWidth: 2,
+                    hover: {
+                        size: 8
+                    }
+                },
+                dataLabels: {
+                    enabled: true,
+                    background: {
+                        enabled: true,
+                        foreColor: '#fff',
+                        borderRadius: 2,
+                        borderWidth: 1,
+                        borderColor: '#fff',
+                        opacity: 0.9
+                    },
+                    formatter: function(value) {
+                        return value != null ? formatFunc(value) : '';
+                    },
+                    style: {
+                        fontSize: '10px',
+                        fontWeight: 'bold'
+                    },
+                    offsetY: -10
+                },
+                title: {
+                    text: `${currentCoverage} - ${yAxisTitle}`,
+                    style: {
+                        fontSize: '16px',
+                        fontWeight: 'bold'
+                    }
+                },
+                xaxis: {
+                    categories: allYears,
+                    title: { text: 'Accident Year' },
+                    labels: {
+                        formatter: function(value) {
+                            return value ? value.toString() : '';
+                        }
+                    }
+                },
+                yaxis: {
+                    title: { text: yAxisTitle },
+                    labels: {
+                        formatter: formatFunc
+                    }
+                },
+                tooltip: {
+                    y: {
+                        formatter: formatFunc
+                    }
+                },
+                annotations: annotations,
+                legend: {
+                    position: 'top'
+                },
+                grid: {
+                    show: true
+                }
+            };
+
+            if (currentChart) {
+                currentChart.destroy();
+            }
+
+            currentChart = new ApexCharts(document.querySelector("#claimTrendChart"), options);
+            currentChart.render();
+
+            console.table({
+                categories: allYears,
+                chartActualData,
+                chartProjectedData
+            });
+        }
+
         let showChartInitial = getAndManageStoredClaimTrendView();
         setViewVisibility(showChartInitial);
 
@@ -168,10 +487,37 @@
             }
         });
 
-        // Ensure form submission preserves the view state by not overriding via localStorage in that specific case
-        // The page reloads and getAndManageStoredClaimTrendView will correctly apply the stored preference.
-        // No special handling needed for form submit, as the general logic covers it.
+        // Unified Coverage button event listeners
+        allCoverageButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const selectedCoverageId = this.dataset.value; // This is an ID e.g. "0"
+                coverageSelect.value = selectedCoverageId; // Update hidden select
+                setActiveCoverageButton(selectedCoverageId); // Update button group visual state
 
+                const newCoverageName = coverageIdToNameMap[selectedCoverageId];
+                if (newCoverageName && newCoverageName !== currentCoverage) {
+                     currentCoverage = newCoverageName;
+                     // No need to call setActiveCoverageButton again, it's already done
+                     updateChart(); // Re-render chart with new coverage
+                } else if (newCoverageName === currentCoverage) {
+                    // If same coverage clicked, maybe do nothing or force re-render if needed
+                    // updateChart(); // Potentially uncomment if re-render on same button is desired
+                }
+            });
+        });
+
+        // Metric button event listeners
+        metricButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                currentMetric = this.dataset.metric;
+                setMetricButtonActive(currentMetric);
+                updateChart();
+            });
+        });
+
+        // Initialize button states
+        setActiveCoverageButton(initialCoverageId);
+        setMetricButtonActive(currentMetric);
     });
 </script>
 

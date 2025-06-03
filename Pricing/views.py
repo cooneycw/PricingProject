@@ -2176,8 +2176,184 @@ def claim_trend_report(request, game_id):
         'selected_year': selected_year,
         'coverage_options': coverage_options,
         'selected_coverage': selected_coverage,
+        'chart_data': prepare_claim_trend_chart_data(triangle_df, financial_df, claimtrend_dict, clm_yrs, unique_years, selected_year) if not triangle_df.empty else None,
         }
     return render(request, template_name, context)
+
+
+def prepare_claim_trend_chart_data(triangle_df, financial_df, claimtrend_dict, clm_yrs, unique_years, selected_year):
+    """Prepare chart data for all three coverages"""
+    
+    chart_data = {
+        'years': clm_yrs,
+        'coverages': {}
+    }
+    
+    # Process each coverage type
+    coverages = ['Bodily Injury', 'Collision', 'Total']
+    coverage_keys = ['paid_bi', 'paid_cl', 'paid_to']
+    
+    for coverage_idx, (coverage_name, coverage_key) in enumerate(zip(coverages, coverage_keys)):
+        
+        # Get claim data for this coverage
+        claim_data = triangle_df['triangles'][0]['triangles']
+        acc_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
+        devl_mths = [(yr + 1)*12 for yr in claim_data['devl_yrs']]
+        
+        # Build reform factor for this coverage
+        reform_fact = []
+        for yr in reversed(clm_yrs):
+            if coverage_idx == 2:  # Total
+                reform_fact.append(claimtrend_dict['bi_reform'][f'{yr}'] or claimtrend_dict['cl_reform'][f'{yr}'])
+            elif coverage_idx == 1:  # Collision
+                reform_fact.append(claimtrend_dict['cl_reform'][f'{yr}'])
+            elif coverage_idx == 0:  # Bodily Injury
+                reform_fact.append(claimtrend_dict['bi_reform'][f'{yr}'])
+        
+        # Create dataframe for this coverage
+        df = pd.DataFrame(columns=acc_yrs, index=devl_mths)
+        for i, devl_mth in enumerate(devl_mths):
+            df.loc[devl_mth] = claim_data[coverage_key][i]
+        
+        transposed_df = df.T
+        
+        # Calculate development factors
+        fact_labels = ['Age-to-Age']
+        fact_devl_mths = copy.deepcopy(devl_mths)
+        fact_devl_mths[0] = None
+        fact_df = pd.DataFrame(columns=fact_labels, index=fact_devl_mths)
+        
+        for i, fact_devl_mth in enumerate(fact_devl_mths):
+            if fact_devl_mth == fact_devl_mths[0]:
+                fact_df.iloc[0, 0] = 0
+            if fact_devl_mth == fact_devl_mths[1]:
+                numerator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 1])
+                denominator = sum(transposed_df.values[0:len(acc_yrs[:-1])][:, 0])
+                if denominator == 0:
+                    denominator = 1
+                fact_df.iloc[1, 0] = numerator / denominator
+            if fact_devl_mth == fact_devl_mths[2]:
+                numerator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 2])
+                denominator = sum(transposed_df.values[0:len(acc_yrs[:-2])][:, 1])
+                if denominator == 0:
+                    denominator = 1
+                fact_df.iloc[2, 0] = numerator / denominator
+                fact_df.iloc[1, 0] = fact_df.iloc[1, 0] * fact_df.iloc[2, 0]
+        
+        # Create display dataframe
+        cols = ['Actual Paid', 'Devl Factor', 'Ultimate Incurred', 'In-Force', 'Loss Cost', 'Claim Count', 'Frequency', 'Severity', 'Product Reform']
+        display_yrs = [f'Acc Yr {acc_yr}' for acc_yr in claim_data['acc_yrs']]
+        display_yrs.reverse()
+        display_df = pd.DataFrame(columns=display_yrs, index=cols)
+        
+        # Calculate all the metrics
+        for i, categ in enumerate(cols):
+            if categ == 'Actual Paid':
+                for j in range(len(acc_yrs)):
+                    display_df.iloc[i, j] = df.iloc[min(j, len(devl_mths) - 1), len(acc_yrs) - j - 1]
+            elif categ == 'Devl Factor':
+                for k in range(len(acc_yrs)):
+                    if k < 2:
+                        display_df.iloc[i, k] = fact_df.iloc[k + 1].values[0]
+                    else:
+                        display_df.iloc[i, k] = 1
+            elif categ == 'Ultimate Incurred':
+                for l in range(len(acc_yrs)):
+                    display_df.iloc[i, l] = display_df.iloc[i - 2, l] * display_df.iloc[i - 1, l]
+            elif categ == 'In-Force':
+                for m in range(len(acc_yrs)):
+                    display_df.iloc[i, m] = financial_df.iloc[len(financial_df) - m - 1 - (max(unique_years) - selected_year), 1]
+            elif categ == 'Loss Cost':
+                for n in range(len(acc_yrs)):
+                    denom = display_df.iloc[i - 1, n]
+                    if denom != 0:
+                        display_df.iloc[i, n] = decimal.Decimal(display_df.iloc[i - 2, n]) / denom
+                    else:
+                        display_df.iloc[i, n] = 0
+                # Calculate projections using logistic regression
+                lcost = [(clm_yrs[len(clm_yrs) - q - 1], float(lc)) for q, lc in enumerate(display_df.iloc[i].values)]
+                reform, proj_lcost_est, proj_lcost = perform_logistic_regression(lcost, reform_fact)
+            elif categ == 'Claim Count':
+                for o in range(len(acc_yrs)):
+                    if coverage_idx in [1, 2]: # collision or total
+                        display_df.iloc[i, o] = financial_df.iloc[len(financial_df) - o - 1 - (max(unique_years) - selected_year), 3]
+                    else:
+                        display_df.iloc[i, o] = financial_df.iloc[len(financial_df) - o - 1 - (max(unique_years) - selected_year), 2]
+            elif categ == 'Frequency':
+                for p in range(len(acc_yrs)):
+                    denom = display_df.iloc[i - 3, p]
+                    if denom != 0:
+                        display_df.iloc[i, p] = 100 * decimal.Decimal(display_df.iloc[i - 1, p]) / denom
+                    else:
+                        display_df.iloc[i, p] = 0
+                # Calculate projections
+                freq = [(clm_yrs[len(clm_yrs) - q - 1], float(freq)) for q, freq in enumerate(display_df.iloc[i].values)]
+                _, proj_freq_est, proj_freq = perform_logistic_regression(freq, reform_fact)
+            elif categ == 'Severity':
+                for q in range(len(acc_yrs)):
+                    denom = display_df.iloc[i - 2, q]
+                    if denom != 0:
+                        display_df.iloc[i, q] = decimal.Decimal(display_df.iloc[i - 5, q]) / denom
+                    else:
+                        display_df.iloc[i, q] = 0
+                # Calculate projections
+                sev = [(clm_yrs[len(clm_yrs) - q - 1], float(sev)) for q, sev in enumerate(display_df.iloc[i].values)]
+                _, proj_sev_est, proj_sev = perform_logistic_regression(sev, reform_fact)
+            elif categ == 'Product Reform':
+                for r in range(len(acc_yrs)):
+                    display_df.iloc[i, r] = reform_fact[r]  # Store as boolean/int for chart
+        
+        # Store chart data for this coverage
+        chart_data['coverages'][coverage_name] = {
+            'actual_loss_cost': [float(x) for x in display_df.loc['Loss Cost'].values],
+            'projected_loss_cost': [float(x) for x in proj_lcost],
+            'actual_frequency': [float(x) for x in display_df.loc['Frequency'].values],
+            'projected_frequency': [float(x) for x in proj_freq],
+            'actual_severity': [float(x) for x in display_df.loc['Severity'].values],
+            'projected_severity': [float(x) for x in proj_sev],
+            'reform_years': [list(reversed(clm_yrs))[i] for i, reform in enumerate(reform_fact) if reform],
+            'reform_fact': reform_fact,
+            'reform_details': get_reform_details_for_years(claimtrend_dict, clm_yrs, reform_fact, coverage_idx)
+        }
+    
+    return chart_data
+
+
+def get_reform_details_for_years(claimtrend_dict, clm_yrs, reform_fact, coverage_idx):
+    """Determine specific reform types for each reform year based on coverage"""
+    reform_details = {}
+    
+    # CRITICAL FIX: reform_fact was built using reversed(clm_yrs)
+    # So reform_fact[0] corresponds to the LAST year in clm_yrs, not the first
+    # We need to map the indices correctly
+    reversed_clm_yrs = list(reversed(clm_yrs))
+    
+    for i, reform in enumerate(reform_fact):
+        if reform:  # If there's a reform in this position
+            # Get the year from reversed_clm_yrs, not clm_yrs
+            year = reversed_clm_yrs[i]
+            
+            bi_reform = claimtrend_dict['bi_reform'][f'{year}']
+            cl_reform = claimtrend_dict['cl_reform'][f'{year}']
+            
+            if coverage_idx == 0:  # Bodily Injury coverage
+                # Only show if BI reform actually occurred
+                if bi_reform:
+                    reform_details[year] = 'Bodily Injury'
+            elif coverage_idx == 1:  # Collision coverage  
+                # Only show if CL reform actually occurred
+                if cl_reform:
+                    reform_details[year] = 'Collision'
+            elif coverage_idx == 2:  # Total coverage
+                # Show what actually happened - could be BI, CL, or both
+                if bi_reform and cl_reform:
+                    reform_details[year] = 'Bodily Injury + Collision'
+                elif bi_reform:
+                    reform_details[year] = 'Bodily Injury'
+                elif cl_reform:
+                    reform_details[year] = 'Collision'
+    
+    return reform_details
 
 
 @login_required()

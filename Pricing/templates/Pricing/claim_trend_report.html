@@ -391,7 +391,7 @@
                     height: 400,
                     toolbar: { show: true }
                 },
-                colors: ['#008FFB', '#00E396'],
+                colors: ['#1f4e79', '#d35400'],
                 stroke: {
                     width: [3, 2],
                     curve: 'smooth',
@@ -487,23 +487,27 @@
             }
         });
 
-        // Unified Coverage button event listeners
-        allCoverageButtons.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const selectedCoverageId = this.dataset.value; // This is an ID e.g. "0"
-                coverageSelect.value = selectedCoverageId; // Update hidden select
-                setActiveCoverageButton(selectedCoverageId); // Update button group visual state
+        // Coverage button event listeners using event delegation
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('table-coverage-btn')) {
+                // Table coverage buttons: update hidden select and submit form to reload table data
+                const selectedCoverageId = e.target.dataset.value;
+                coverageSelect.value = selectedCoverageId;
+                setActiveCoverageButton(selectedCoverageId);
+                // Submit the form to reload the page with new table data
+                reportOptionsForm.submit();
+            } else if (e.target.classList.contains('chart-coverage-btn')) {
+                // Chart coverage buttons: update chart dynamically without form submission
+                const selectedCoverageId = e.target.dataset.value;
+                coverageSelect.value = selectedCoverageId; // Keep hidden select in sync
+                setActiveCoverageButton(selectedCoverageId);
 
                 const newCoverageName = coverageIdToNameMap[selectedCoverageId];
                 if (newCoverageName && newCoverageName !== currentCoverage) {
                      currentCoverage = newCoverageName;
-                     // No need to call setActiveCoverageButton again, it's already done
                      updateChart(); // Re-render chart with new coverage
-                } else if (newCoverageName === currentCoverage) {
-                    // If same coverage clicked, maybe do nothing or force re-render if needed
-                    // updateChart(); // Potentially uncomment if re-render on same button is desired
                 }
-            });
+            }
         });
 
         // Metric button event listeners

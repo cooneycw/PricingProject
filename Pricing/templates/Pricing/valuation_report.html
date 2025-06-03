@@ -21,52 +21,528 @@
                 {% if has_financial_data %}
                         <div style="padding-left: 20px;  margin-bottom: 20px;">
                             <h6>{{ valuation_period }}</h6>
-
-                            <form method="POST" action="" style="display: flex; align-items: center;"> <!-- Flex display for alignment -->
-                                {% csrf_token %}
-                                <div style="margin-right: 15px; "> <!-- Whitespace before the selector -->
-                                    <select id="year" name="year">
-                                        {% for year in unique_years %}
-                                            <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <input type="submit" value="Select" style="margin-right: 40px;">
-                                <input type="submit" name="Last" value="Last" style="margin-right: 10px;">
-                                <input type="submit" name="Next" value="Next">
-                            </form>
+                            
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <form method="POST" action="" style="display: flex; align-items: center;">
+                                    {% csrf_token %}
+                                    <div style="margin-right: 15px;">
+                                        <select id="year" name="year" class="form-select form-select-sm">
+                                            {% for year in unique_years %}
+                                                <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <input type="submit" value="Select" class="btn btn-primary btn-sm" style="margin-right: 20px;">
+                                    <input id="lastBtn" type="submit" name="Last" value="Last" class="btn btn-secondary btn-sm" style="margin-right: 10px;">
+                                    <input id="nextBtn" type="submit" name="Next" value="Next" class="btn btn-secondary btn-sm">
+                                </form>
+                                <button id="toggleViewBtn" class="btn btn-primary btn-sm ms-auto">Show Chart</button>
+                            </div>
                             <hr>
-                            <div class="financial-data-table">
+                            <div class="financial-data-table" style="{{ initial_table_style|default:'display: block' }};">
                                 {{ financial_data_table|safe }}
+                            </div>
+                            
+                            <div id="chartElementsContainer" style="{{ initial_chart_style|default:'display: none' }};">
+                                <div class="btn-group" role="group" aria-label="Valuation Component Filters" id="valuationComponentFilters" style="margin-bottom: 10px; display: flex; justify-content: center;">
+                                    <button type="button" class="btn btn-outline-primary active" data-component="dividend_pv" id="btnPvDividends">P.V. Dividends</button>
+                                    <button type="button" class="btn btn-outline-primary active" data-component="future_value" id="btnFutureValue">Future Value</button>
+                                    <button type="button" class="btn btn-outline-primary active" data-component="excess_capital" id="btnExcessCapital">Excess Capital</button>
+                                </div>
+                                <div id="valuationChart" style="overflow-x: auto; overflow-y: hidden;"></div>
                             </div>
                         </div>
                 {% endif %}
             </div>
         </section>
     </main>
- <script>
+{% if has_financial_data %}
+    {{ chart_data|json_script:"chartDataJson" }}
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Select all table rows within the financial-data-table
+        // Table cell formatting (as before)
         var tableRows = document.querySelectorAll('.financial-data-table tr');
-
-        // Loop through each table row
         tableRows.forEach(function(row) {
-            // Select all th and td elements in the current row
             var cells = row.querySelectorAll('th, td');
-
-            // Loop through each cell
             cells.forEach(function(cell) {
-                // Check if the cell is empty
                 if(cell.innerHTML.trim() === '') {
-                    // If empty, insert a non-breaking space character
                     cell.innerHTML = '&nbsp;';
                 }
-
-                // Apply the monospaced font to each cell
-                cell.style.fontFamily = "'Roboto Mono', monospace";  // Replace 'Roboto Mono' with your chosen font
+                cell.style.fontFamily = "'Roboto Mono', monospace";
             });
         });
-    });
-</script>
 
+        // Toggle and Chart Logic
+        const toggleButton = document.getElementById('toggleViewBtn');
+        const tableContainer = document.querySelector('.financial-data-table');
+        const chartElementsContainer = document.getElementById('chartElementsContainer');
+        const valuationChartPlaceholder = document.getElementById('valuationChart');
+
+        let isNoviceGame = false;
+        try {
+            isNoviceGame = JSON.parse("{{ is_novice_game|yesno:'true,false,null' }}");
+        } catch (e) {
+            console.error('Error parsing is_novice_game:', e);
+            isNoviceGame = false;
+        }
+
+        let chartData = null;
+        const chartDataElement = document.getElementById('chartDataJson');
+        if (chartDataElement) {
+            try {
+                chartData = JSON.parse(chartDataElement.textContent);
+            } catch (e) {
+                chartData = null;
+            }
+        }
+
+        // Determine current system's latest year
+        let currentSystemLatestYear = null;
+        if (chartData && chartData.valuation_year) {
+            currentSystemLatestYear = chartData.valuation_year;
+        }
+        if (isNaN(currentSystemLatestYear) || currentSystemLatestYear === null || currentSystemLatestYear === -Infinity) {
+            const yearOptions = Array.from(document.querySelectorAll('#year option'))
+                                     .map(opt => parseInt(opt.value, 10))
+                                     .filter(y => !isNaN(y));
+            if (yearOptions.length > 0) {
+                currentSystemLatestYear = Math.max(...yearOptions);
+            }
+        }
+        if (currentSystemLatestYear === -Infinity || isNaN(currentSystemLatestYear)) {
+            currentSystemLatestYear = null;
+        }
+
+        function setButtonState(showChart) {
+            if (toggleButton) {
+                if (showChart) {
+                    toggleButton.textContent = 'Show Table';
+                    toggleButton.classList.remove('btn-primary');
+                    toggleButton.classList.add('btn-warning');
+                } else {
+                    toggleButton.textContent = 'Show Chart';
+                    toggleButton.classList.remove('btn-warning');
+                    toggleButton.classList.add('btn-primary');
+                }
+            }
+        }
+
+        function setViewVisibility(showChart) {
+            const lastBtn = document.getElementById('lastBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            if (showChart) {
+                if (tableContainer) tableContainer.style.display = 'none';
+                if (chartElementsContainer) chartElementsContainer.style.display = 'block';
+                // Hide navigation buttons when chart is active
+                if (lastBtn) lastBtn.style.display = 'none';
+                if (nextBtn) nextBtn.style.display = 'none';
+            } else {
+                if (tableContainer) tableContainer.style.display = 'block';
+                if (chartElementsContainer) chartElementsContainer.style.display = 'none';
+                // Show navigation buttons when table is active
+                if (lastBtn) lastBtn.style.display = 'inline-block';
+                if (nextBtn) nextBtn.style.display = 'inline-block';
+            }
+            setButtonState(showChart);
+        }
+
+        // Function to update localStorage and return the view state (true for chart, false for table)
+        function getAndManageStoredValuationView(currentLatestYearFromSystem, isNoviceUser) {
+            let storedViewPref = localStorage.getItem('valuationView');
+            let storedLatestYear = localStorage.getItem('valuationLatestYear') ? parseInt(localStorage.getItem('valuationLatestYear'), 10) : null;
+            let showChart;
+
+            if (currentLatestYearFromSystem !== null && (storedLatestYear === null || currentLatestYearFromSystem > storedLatestYear)) {
+                showChart = true;
+                localStorage.setItem('valuationView', 'chart');
+                localStorage.setItem('valuationLatestYear', currentLatestYearFromSystem.toString());
+            } else if (storedViewPref) {
+                showChart = (storedViewPref === 'chart');
+                if (storedLatestYear === null && currentLatestYearFromSystem !== null) {
+                    localStorage.setItem('valuationLatestYear', currentLatestYearFromSystem.toString());
+                }
+            } else {
+                showChart = isNoviceUser;
+                localStorage.setItem('valuationView', showChart ? 'chart' : 'table');
+                if (currentLatestYearFromSystem !== null) {
+                    localStorage.setItem('valuationLatestYear', currentLatestYearFromSystem.toString());
+                }
+            }
+            return showChart;
+        }
+
+        let showChartsInitialState = getAndManageStoredValuationView(currentSystemLatestYear, isNoviceGame);
+
+        if (tableContainer && chartElementsContainer && toggleButton) {
+            setViewVisibility(showChartsInitialState);
+        }
+
+        if (chartData && chartData.companies && chartData.companies.length > 0) {
+            const commonColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+            
+            // Prepare data for stacked bar chart
+            let companies = chartData.companies;
+            let dividendPvData = chartData.dividend_pv;
+            let futureValueData = chartData.future_value;
+            let excessCapitalData = chartData.excess_capital;
+            let valuationRanks = chartData.valuation_ranks;
+            const currentUser = chartData.current_user;
+            
+            // Calculate total valuation and overall ranks for each company
+            const companiesWithData = companies.map((company, index) => ({
+                company: company,
+                dividend_pv: dividendPvData[index],
+                future_value: futureValueData[index],
+                excess_capital: excessCapitalData[index],
+                total_valuation: dividendPvData[index] + futureValueData[index] + excessCapitalData[index],
+                index: index
+            }));
+            
+            // Track which components are currently visible (controlled by Bootstrap buttons)
+            let visibleComponents = {
+                dividend_pv: true,
+                future_value: true,
+                excess_capital: true
+            };
+            
+            // Function to calculate current rankings based on visible components
+            function calculateCurrentRanks(visibleComps) {
+                const rankedCompanies = companiesWithData.map(company => {
+                    let currentTotal = 0;
+                    if (visibleComps.dividend_pv) currentTotal += company.dividend_pv;
+                    if (visibleComps.future_value) currentTotal += company.future_value;
+                    if (visibleComps.excess_capital) currentTotal += company.excess_capital;
+                    
+                    return {
+                        ...company,
+                        currentTotal: currentTotal
+                    };
+                });
+                
+                // Sort by current total (highest first) and assign ranks
+                rankedCompanies.sort((a, b) => b.currentTotal - a.currentTotal);
+                rankedCompanies.forEach((company, rank) => {
+                    companiesWithData[company.index].currentRank = rank + 1;
+                });
+                
+                return rankedCompanies;
+            }
+            
+            let currentSortComponent = 'total';
+            
+            // Define filterButtons and setup visuals and listeners once chartData is confirmed
+            const filterButtons = document.querySelectorAll('#valuationComponentFilters button');
+
+            const componentColors = {
+                dividend_pv: '#775DD0',
+                future_value: '#00A3E0',
+                excess_capital: '#FF4560'
+            };
+
+            function updateButtonVisuals() {
+                filterButtons.forEach(button => {
+                    const componentKey = button.dataset.component;
+                    const color = componentColors[componentKey] || '#007bff'; // Default to blue if not found
+
+                    if (visibleComponents[componentKey]) {
+                        button.classList.add('active');
+                        button.style.backgroundColor = color;
+                        button.style.borderColor = color;
+                        button.style.color = 'white';
+                        // Remove outline style if it was there
+                        button.classList.remove('btn-outline-primary'); 
+                        // Ensure base btn class is present, and specific color class if desired e.g. btn-primary (though we override with style)
+                        if (!button.classList.contains('btn')) {
+                            button.classList.add('btn');
+                        }
+                    } else {
+                        button.classList.remove('active');
+                        button.style.backgroundColor = 'transparent';
+                        button.style.borderColor = color;
+                        button.style.color = color;
+                        // Ensure it has outline styling properties if we are not using a specific btn-outline-* class
+                        // For simplicity, we'll rely on direct style manipulation for inactive state
+                        // Or, re-add a generic outline class if you have one defined that fits this
+                    }
+                });
+            }
+
+            filterButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const componentKey = this.dataset.component;
+                    const currentlyActive = visibleComponents[componentKey];
+                    
+                    const activeCount = Object.values(visibleComponents).filter(v => v).length;
+                    if (currentlyActive && activeCount === 1) {
+                        alert('At least one valuation component must be selected.');
+                        return;
+                    }
+                    
+                    visibleComponents[componentKey] = !currentlyActive;
+                    updateButtonVisuals();
+                    renderChart(currentSortComponent);
+                });
+            });
+            
+            function createChart(sortComponent = 'total') {
+                console.log('=== createChart called ===');
+                console.log('sortComponent:', sortComponent);
+                console.log('visibleComponents at chart creation:', visibleComponents);
+                
+                // Calculate current rankings based on visible components
+                const rankedData = calculateCurrentRanks(visibleComponents);
+                console.log('rankedData calculated for', rankedData.length, 'companies');
+                
+                // Sort companies by the selected component for display order
+                let sortedForDisplay;
+                switch(sortComponent) {
+                    case 'dividend_pv':
+                        sortedForDisplay = [...rankedData].sort((a, b) => b.dividend_pv - a.dividend_pv);
+                        break;
+                    case 'future_value':
+                        sortedForDisplay = [...rankedData].sort((a, b) => b.future_value - a.future_value);
+                        break;
+                    case 'excess_capital':
+                        sortedForDisplay = [...rankedData].sort((a, b) => b.excess_capital - a.excess_capital);
+                        break;
+                    default: // total or current_total
+                        sortedForDisplay = [...rankedData].sort((a, b) => b.currentTotal - a.currentTotal);
+                }
+                
+                const sortedData = {
+                    companies: sortedForDisplay.map(item => item.company),
+                    dividend_pv: sortedForDisplay.map(item => item.dividend_pv),
+                    future_value: sortedForDisplay.map(item => item.future_value),
+                    excess_capital: sortedForDisplay.map(item => item.excess_capital),
+                    ranks: sortedForDisplay.map(item => companiesWithData[item.index].currentRank)
+                };
+                
+                console.log('SortedData for X-axis formatter:', sortedData.companies, sortedData.ranks);
+
+                // Get visible component names for subtitle
+                const visibleCompNames = [];
+                if (visibleComponents.dividend_pv) visibleCompNames.push('P.V. Dividends');
+                if (visibleComponents.future_value) visibleCompNames.push('Future Projected Value');
+                if (visibleComponents.excess_capital) visibleCompNames.push('Excess Capital');
+                
+                // Create series array based on visibleComponents (controlled by buttons)
+                const series = [];
+                if (visibleComponents.dividend_pv) {
+                    series.push({
+                        name: 'P.V. Dividends (MM)',
+                        data: sortedData.dividend_pv
+                    });
+                }
+                if (visibleComponents.future_value) {
+                    series.push({
+                        name: 'Future Projected Value (MM)',
+                        data: sortedData.future_value
+                    });
+                }
+                if (visibleComponents.excess_capital) {
+                    series.push({
+                        name: 'Excess Capital (MM)',
+                        data: sortedData.excess_capital
+                    });
+                }
+                
+                if (series.length === 0) {
+                    console.warn("No components selected to display in the chart.");
+                    // Optionally, you could display a placeholder or message in the chart area
+                }
+                console.log('Series for chart (based on button selection):', series.map(s => s.name));
+
+                var optionsValuation = {
+                    series: series,
+                    chart: {
+                        type: 'bar',
+                        height: 500,
+                        // Calculate width based on number of companies for horizontal scrolling
+                        width: sortedData.companies.length > 10 ? Math.max(1200, sortedData.companies.length * 80) : '100%',
+                        stacked: true,
+                        toolbar: { show: true },
+                        zoom: {
+                            enabled: true,
+                            type: 'x'
+                        }
+                        // Removed events: { legendClick: ... } as buttons now control this
+                    },
+                    colors: ['#775DD0', '#00A3E0', '#FF4560'], // Updated Future Value color
+                    plotOptions: {
+                        bar: {
+                            horizontal: false,
+                            columnWidth: '70%',
+                            endingShape: 'rounded',
+                            dataLabels: {
+                                total: {
+                                    enabled: true,
+                                    offsetX: 0,
+                                    offsetY: -5,
+                                    style: {
+                                        fontSize: '11px',
+                                        fontWeight: 600
+                                    },
+                                    formatter: function (val) {
+                                        return '$' + val.toFixed(1) + 'M';
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    dataLabels: {
+                        enabled: sortedData.companies.length <= 15, // Hide data labels if too many companies
+                        formatter: function(val, opts) {
+                            if (val === 0) return '';
+                            return '$' + val.toFixed(1) + 'M';
+                        },
+                        style: {
+                            fontSize: '10px',
+                            fontWeight: 'bold',
+                            colors: ['#fff']
+                        }
+                    },
+                    title: {
+                        text: `Company Valuation Comparison`,
+                        subtitle: {
+                            text: `Ranked by: ${visibleCompNames.join(' + ')} | ${sortComponent === 'total' ? 'Sorted by Combined Total' : 'Sorted by ' + sortComponent.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
+                            style: {
+                                fontSize: '12px',
+                                color: '#666'
+                            }
+                        },
+                        style: {
+                            fontSize: '16px',
+                            fontWeight: 'bold'
+                        }
+                    },
+                    xaxis: {
+                        categories: sortedData.companies,
+                        title: { text: 'Company Rankings' },
+                        labels: {
+                            style: {
+                                fontSize: sortedData.companies.length > 15 ? '9px' : '11px',
+                                colors: function(opts) {
+                                    const categoryValue = opts.value; // Raw category value
+                                    // console.log(`Style - Category: '${categoryValue}', currentUser: '${currentUser}', Index: ${opts.index}`);
+                                    if (categoryValue && currentUser && categoryValue.toString().trim() === currentUser.toString().trim()) {
+                                        // console.log('Highlighting current user:', currentUser);
+                                        return '#FF0000'; // Red
+                                    } else {
+                                        return '#373d3f'; // Default
+                                    }
+                                }
+                            },
+                            formatter: function(value, opts) {
+                                const index = opts.dataPointIndex;
+                                const rank = sortedData.ranks[index];
+                                // console.log(`Formatter - Value: ${value}, Index: ${index}, Rank: ${rank}`);
+                                if (rank === undefined || rank === null) {
+                                   // console.error(`Undefined rank for company: ${value} at index: ${index}`);
+                                    return `${value}`; // Fallback to just company name if rank is missing
+                                }
+                                return `#${rank} ${value}`;
+                            },
+                            rotate: -60 // Always rotate labels for better visibility
+                        }
+                    },
+                    yaxis: {
+                        title: { text: 'Valuation Components ($ Millions)' },
+                        labels: {
+                            formatter: function (value) {
+                                return value !== undefined && value !== null ? "$" + value.toFixed(1) + "M" : '';
+                            }
+                        }
+                    },
+                    legend: {
+                        show: true,
+                        position: 'top',
+                        horizontalAlign: 'center',
+                        onItemClick: {
+                            toggleDataSeries: false // Legend clicks do nothing now
+                        }
+                    },
+                    tooltip: {
+                        shared: true,
+                        intersect: false,
+                        y: {
+                            formatter: function (val, { seriesIndex, dataPointIndex, w }) {
+                                if (val === undefined || val === null) return 'N/A';
+                                const companyName = sortedData.companies[dataPointIndex];
+                                const rank = sortedData.ranks[dataPointIndex];
+                                return `$${val.toFixed(1)}M (Current Rank #${rank})`;
+                            }
+                        }
+                    },
+                    grid: {
+                        padding: { left: 10, right: 10 }
+                    }
+                };
+                
+                return optionsValuation;
+            }
+
+            var valuationChart = null;
+            
+            function renderChart(sortComponent = 'total') {
+                currentSortComponent = sortComponent;
+                if (valuationChart) {
+                    valuationChart.destroy();
+                }
+                
+                const options = createChart(sortComponent);
+                if (chartElementsContainer && valuationChartPlaceholder) {
+                    // Add a scroll instruction if there are many companies
+                    const existingInstruction = document.getElementById('scrollInstruction');
+                    if (existingInstruction) {
+                        existingInstruction.remove();
+                    }
+                    
+                    if (companies.length > 10) {
+                        const instruction = document.createElement('div');
+                        instruction.id = 'scrollInstruction';
+                        instruction.style.cssText = 'margin-bottom: 10px; padding: 8px; background-color: #e7f3ff; border: 1px solid #b6d7ff; border-radius: 4px; font-size: 12px; color: #1976d2;';
+                        instruction.innerHTML = `📊 <strong>Tip:</strong> Chart shows ${companies.length} companies. Scroll horizontally to see all. Click legend items to toggle components and change rankings.`;
+                        chartElementsContainer.parentNode.insertBefore(instruction, chartElementsContainer);
+                    }
+                    
+                    valuationChart = new ApexCharts(valuationChartPlaceholder, options);
+                    valuationChart.render().then(() => {
+                        console.log('Valuation comparison chart rendered successfully.');
+                        console.log('Initial visibleComponents:', visibleComponents);
+                        
+                        // Note: No longer need manual legend click handlers since we're using ApexCharts' built-in legendClick event
+                    }).catch(err => {
+                        console.error('Chart failed to render:', err);
+                        if (toggleButton) toggleButton.style.display = 'none';
+                        if (chartElementsContainer) chartElementsContainer.style.display = 'none';
+                    });
+                }
+            }
+            
+            // Initial chart render
+            updateButtonVisuals(); // Set initial button active states based on visibleComponents
+            renderChart('total');
+
+        } else {
+            if (toggleButton) toggleButton.style.display = 'none';
+            if (chartElementsContainer) chartElementsContainer.style.display = 'none';
+        }
+
+        if (toggleButton) {
+            toggleButton.addEventListener('click', function() {
+                const isChartVisible = chartElementsContainer && chartElementsContainer.style.display === 'block';
+                const newViewIsCharts = !isChartVisible;
+                setViewVisibility(newViewIsCharts);
+
+                localStorage.setItem('valuationView', newViewIsCharts ? 'chart' : 'table');
+                if (currentSystemLatestYear !== null) {
+                    localStorage.setItem('valuationLatestYear', currentSystemLatestYear.toString());
+                }
+            });
+        }
+    });
+    </script>
+{% endif %}
 {% endblock content %}

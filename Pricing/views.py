@@ -1538,6 +1538,25 @@ def valuation_report(request, game_id):
     if game.game_observable is False and user.username not in human_players:
         raise Http404("You are not permitted to view the game.")
 
+    financial_data_table = '<p>No valuation data available.</p>'  # Ensure always defined
+
+    # Determine if this is a novice game
+    is_novice_game = False
+    try:
+        game_prefs = GamePrefs.objects.get(user=game.initiator)
+        if game_prefs.game_difficulty == 'Novice':
+            is_novice_game = True
+    except GamePrefs.DoesNotExist:
+        pass
+
+    # Determine initial styles based on game difficulty
+    if is_novice_game:
+        initial_chart_style = "display: block;"
+        initial_table_style = "display: none;"
+    else:
+        initial_chart_style = "display: none;"
+        initial_table_style = "display: block;"
+
     if request.POST.get('Back to Dashboard') == 'Back to Dashboard':
         return redirect('Pricing-game_dashboard', game_id=game_id)
 
@@ -1609,6 +1628,12 @@ def valuation_report(request, game_id):
     companies = [player_list[player_id] for player_id in displayed_players]
 
     unique_years = valuation_data.order_by('-year').values_list('year', flat=True).distinct()
+    
+    # Initialize variables
+    chart_data = None
+    valuation_period = None
+    latest_year = None
+    
     if unique_years:  # Proceed if there are any financial years available
         valuation_data_list = list(valuation_data.values('id', 'player_name', 'year', 'in_force', 'beg_in_force',
                                                          'profit',
@@ -1621,6 +1646,8 @@ def valuation_report(request, game_id):
             if selected_year not in unique_years:
                 selected_year = unique_years[0]
             request.session['selected_year'] = selected_year
+            
+            # Continue with table data preparation (original logic)
             val_df = val_df[val_df['year'] <= selected_year]
             val_df = val_df.sort_values(by=['player_name', 'year'])
             all_data_years = val_df['year'].unique()  # Get all unique years
@@ -1652,9 +1679,44 @@ def valuation_report(request, game_id):
             df['avg_profit'] = df.apply(lambda row: calculate_avg_profit(row,),  axis=1)
             df['future_value'] = df.apply(lambda row: calculate_future_value(row, irr_rate_scalar), axis=1)
             df['total_valuation'] = df['total_valuation'] + df['future_value']
+            
+            # --- CHART DATA PREPARATION (after table data is processed) ---
+            # Prepare competitive comparison chart data for all companies
+            if not df.empty and latest_year:
+                # Sort companies by total valuation (highest first) for competitive display
+                chart_df_all_companies = df.sort_values('total_valuation', ascending=False).copy()
+                
+                # Convert all decimal values to float for chart compatibility
+                chart_df_all_companies['total_valuation'] = pd.to_numeric(chart_df_all_companies['total_valuation'], errors='coerce').fillna(0).astype(float)
+                chart_df_all_companies['dividend_pv'] = pd.to_numeric(chart_df_all_companies['dividend_pv'], errors='coerce').fillna(0).astype(float)
+                chart_df_all_companies['future_value'] = pd.to_numeric(chart_df_all_companies['future_value'], errors='coerce').fillna(0).astype(float)
+                chart_df_all_companies['excess_capital'] = pd.to_numeric(chart_df_all_companies['excess_capital'], errors='coerce').fillna(0).astype(float)
+                chart_df_all_companies['in_force'] = pd.to_numeric(chart_df_all_companies['in_force'], errors='coerce').fillna(0).astype(float)
+                
+                # Prepare chart data for competitive comparison
+                chart_data = {
+                    'companies': chart_df_all_companies['player_name'].tolist(),
+                    'total_valuation': (chart_df_all_companies['total_valuation'] / 100000 * 0.1).tolist(),
+                    'dividend_pv': (chart_df_all_companies['dividend_pv'] / 100000 * 0.1).tolist(),
+                    'future_value': (chart_df_all_companies['future_value'] / 100000 * 0.1).tolist(),
+                    'excess_capital': (chart_df_all_companies['excess_capital'] / 100000 * 0.1).tolist(),
+                    'in_force': chart_df_all_companies['in_force'].tolist(),
+                    'valuation_ranks': [], # Will be populated after Valuation Rank column is created
+                    'force_term': get_force_term(game),
+                    'valuation_year': selected_year,
+                    'current_user': user.username
+                }
+            
+            # Continue with table rendering (original logic)
             # Rename the 'player_name' column to 'Company'
             df = df.rename(columns={'player_name': 'Company'})
             df['Valuation Rank'] = df['total_valuation'].rank(ascending=False, method='min').astype(int)
+
+            # Update chart_data with valuation ranks now that they're available
+            if 'chart_data' in locals() and chart_data is not None:
+                # Sort companies by total valuation (highest first) for competitive display
+                chart_df_sorted = df.sort_values('total_valuation', ascending=False).copy()
+                chart_data['valuation_ranks'] = chart_df_sorted['Valuation Rank'].tolist()
 
             filtered_df = df[df['Company'].isin(companies)]
             filtered_df = filtered_df.drop(['tot_in_force', 'beg_in_force', 'profit'], axis=1)  # Drop unwanted columns
@@ -1749,6 +1811,10 @@ def valuation_report(request, game_id):
         'latest_year': latest_year,
         'selected_year': selected_year,
         'valuation_period': valuation_period,
+        'chart_data': chart_data,
+        'is_novice_game': is_novice_game,
+        'initial_chart_style': initial_chart_style,
+        'initial_table_style': initial_table_style,
     }
     return render(request, template_name, context)
 

@@ -267,6 +267,16 @@
                 const maxVal = Math.max(...numericArray);
                 return maxVal * (1 + paddingPercent);
             }
+
+            // Helper function to calculate Y-axis min with padding
+            function getAxisMin(dataArray, paddingPercent = 0.1) {
+                if (!dataArray || dataArray.length === 0) return undefined;
+                const numericArray = dataArray.map(val => Number(val)).filter(val => !isNaN(val));
+                if (numericArray.length === 0) return undefined;
+                const minVal = Math.min(...numericArray);
+                if (minVal <= 0) return 0; // If min is already 0 or negative, common to start axis at 0
+                return minVal * (1 - paddingPercent);
+            }
             
             // Calculate max values for Y-axes - REORGANIZED
             const customersMaxChart1 = getAxisMax(chartData.customers);
@@ -274,6 +284,7 @@
             // const cancellationsMaxChart1 = getAxisMax(chartData.cancellations); // No longer needed for chart 1
 
             const mktgSpendPercentMaxChart2 = getAxisMax(chartData.marketing_spend_percent_industry);
+            // const mktgSpendPercentMinChart2 = getAxisMin(chartData.marketing_spend_percent_industry); // Removed - Reverting to 0 for Chart 2 Mktg Spend
             // const quotesMaxChart2 = getAxisMax(chartData.quotes); // Will be part of activityCountsMaxChart2
             // const salesMaxChart2 = getAxisMax(chartData.sales); // Will be part of activityCountsMaxChart2
             const activityCountsMaxChart2 = getAxisMax([...(chartData.quotes || []), ...(chartData.sales || []), ...(chartData.cancellations || [])]); // Added cancellations
@@ -386,7 +397,7 @@
                     name: 'Cancellations', type: 'line', data: chartData.cancellations
                 }],
                 chart: commonChartProps,
-                colors: ['#008FFB', '#00E396', '#FF4560', '#FEB019'], // Mktg:Blue, Quotes:Green, Sales:Red, Canx:Orange
+                colors: ['#008FFB', '#5400E0', '#FFD700', '#00CED1'], // Mktg:Blue, Quotes:Purple, Sales:Yellow, Canx:Light Blue
                 stroke: { width: [0, 3, 3, 2], curve: 'smooth' },
                 title: { text: 'Marketing & Sales Activity' },
                 xaxis: commonXAxis,
@@ -414,7 +425,7 @@
                         title: { text: 'Mktg Spend (% of Industry)' },
                         labels: { formatter: function (value) { return value !== undefined && value !== null ? value.toFixed(1) + "%" : ''; } },
                         tickAmount: 5,
-                        min: 0, // Always start at 0
+                        min: 0, // Reverted to 0 for Mktg Spend % Y-axis min
                         max: mktgSpendPercentMaxChart2
                     }
                 ],
@@ -486,7 +497,7 @@
                         title: { text: 'Average Premium ($' },
                         labels: { formatter: function (value) { return value !== undefined && value !== null ? "$" + Math.round(value).toLocaleString() : ''; } },
                         tickAmount: 5,
-                        min: 0, // Assuming avg premium should start at 0 for this context, adjust if not
+                        min: getAxisMin(chartData.average_premium), // Use dynamic min for Avg Premium in Chart 3
                         max: avgPremiumMaxChart3
                     },
                     {
